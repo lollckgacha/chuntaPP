@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>천타버스 팡팡</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=Jua&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --theme-mint: #acfef8;
+            --theme-mint-dark: #6bd6d0;
+            --bg-dark: #12141c;
+            --panel-bg: rgba(30, 34, 45, 0.88);
+            --border-color: rgba(172, 254, 248, 0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; outline: none; }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: var(--bg-dark);
+            color: white;
+            height: 100dvh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .menu-bg {
+            position: fixed; inset: 0; z-index: -1;
+            background: radial-gradient(circle at 50% 50%, rgba(172,254,248,0.1) 0%, var(--bg-dark) 75%);
+        }
+
+        /* ── Loading / Start ── */
+        #loadingOverlay {
+            position: fixed; inset: 0;
+            background-color: var(--bg-dark);
+            background-image:
+                linear-gradient(rgba(18,20,28,0.55), rgba(18,20,28,0.78)),
+                url('./chunta.jpg');
+            background-size: cover;
+            background-position: center;
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column; gap: 20px;
+            z-index: 9999;
+        }
+        .spinner {
+            width: 60px; height: 60px;
+            border: 6px solid rgba(255,255,255,0.12);
+            border-top-color: var(--theme-mint);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #startContent { display: none; flex-direction: column; align-items: center; }
+
+        /* ── Chibi grids (start / gameover) ── */
+        .chibi-grid-6 {
+            display: grid;
+            grid-template-columns: repeat(6, 52px);
+            gap: 7px;
+            justify-content: center;
+        }
+        .chibi-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            gap: 9px;
+            justify-content: center;
+            margin: 12px auto 0;
+        }
+        .chibi-tile {
+            border-radius: 12px; overflow: hidden;
+            border: 2px solid;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        .chibi-tile img {
+            width: 100%; height: 100%;
+            object-fit: cover; object-position: center top;
+            display: block;
+        }
+
+        /* ── Game wrapper ── */
+        #gameWrapper {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%; height: 100dvh;
+            padding: 10px 14px;
+            gap: 7px;
+        }
+        #gameWrapper.active { display: flex; }
+
+        /* ── Score row ── */
+        .score-row { display: flex; gap: 10px; flex-shrink: 0; align-items: stretch; }
+        .score-card {
+            background: var(--panel-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            padding: 7px 14px; text-align: center;
+            min-width: 82px; backdrop-filter: blur(8px);
+        }
+        .score-label { font-size: 10px; color: rgba(172,254,248,0.7); font-weight: 700; letter-spacing: 0.12em; }
+        .score-value { font-size: 24px; font-weight: 900; color: white; line-height: 1.15; }
+        #bestDisplay { color: #fbbf24; }
+
+        /* Timer card */
+        .timer-card {
+            background: var(--panel-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            padding: 5px 18px; text-align: center;
+            min-width: 88px; backdrop-filter: blur(8px);
+            transition: border-color 0.4s;
+        }
+        #timerDisplay {
+            font-size: 36px; font-weight: 900; line-height: 1.05;
+            color: var(--theme-mint);
+            font-variant-numeric: tabular-nums;
+            transition: color 0.4s;
+        }
+        #timerDisplay.warn   { color: #facc15; }
+        #timerDisplay.danger {
+            color: #ef4444;
+            animation: timerPulse 0.45s ease-in-out infinite alternate;
+        }
+        @keyframes timerPulse { from { transform: scale(1); } to { transform: scale(1.14); } }
+        .timer-card.warn   { border-color: rgba(250,204,21,0.55); }
+        .timer-card.danger { border-color: rgba(239,68,68,0.65); }
+
+        /* ── Timer gauge ── */
+        #timerBarWrap {
+            height: 12px;
+            background: rgba(255,255,255,0.07);
+            border-radius: 7px;
+            border: 1px solid rgba(172,254,248,0.18);
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: inset 0 1px 4px rgba(0,0,0,0.35);
+        }
+        #timerBarFill {
+            height: 100%; width: 100%;
+            background: linear-gradient(90deg, var(--theme-mint-dark), var(--theme-mint));
+            border-radius: 7px;
+            transition: width 1s linear, background 0.5s;
+            box-shadow: 0 0 8px rgba(172,254,248,0.45);
+        }
+        #timerBarFill.warn {
+            background: linear-gradient(90deg, #a16207, #facc15);
+            box-shadow: 0 0 8px rgba(250,204,21,0.5);
+        }
+        #timerBarFill.danger {
+            background: linear-gradient(90deg, #991b1b, #ef4444);
+            box-shadow: 0 0 12px rgba(239,68,68,0.65);
+            animation: barFlash 0.45s ease-in-out infinite alternate;
+        }
+        @keyframes barFlash { from { opacity:0.82; } to { opacity:1; } }
+
+        /* ── Chain / Time bonus messages ── */
+        #chainDisplay {
+            font-size: 17px; font-weight: 900;
+            color: var(--theme-mint);
+            min-height: 22px; flex-shrink: 0;
+            text-align: center;
+            text-shadow: 0 0 12px rgba(172,254,248,0.7);
+            transition: opacity 0.4s;
+            letter-spacing: 0.04em;
+        }
+
+        /* ── Board ── */
+        #boardWrapper {
+            background: rgba(0,0,0,0.45);
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            padding: 6px;
+            box-shadow: 0 0 32px rgba(0,0,0,0.6), inset 0 0 20px rgba(0,0,0,0.3);
+            flex-shrink: 0;
+        }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, var(--tile-size, 60px));
+            grid-template-rows:    repeat(8, var(--tile-size, 60px));
+            gap: 4px;
+        }
+
+        /* ── Tile ── */
+        .tile {
+            width:  var(--tile-size, 60px);
+            height: var(--tile-size, 60px);
+            border-radius: 14px;
+            border: 3px solid;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            background: var(--member-color, #888);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.45);
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+            flex-shrink: 0;
+        }
+        .tile img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            object-position: center top;
+            display: block;
+            pointer-events: none;
+        }
+
+        .tile:hover { transform: scale(1.07); box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .tile.selected {
+            transform: scale(1.13) !important;
+            border-color: white !important;
+            box-shadow: 0 0 0 3px white, 0 0 18px rgba(172,254,248,0.9) !important;
+            z-index: 10;
+        }
+        .tile.hint-adj { animation: hintAdj 0.38s ease; }
+        @keyframes hintAdj {
+            0%,100% { box-shadow: 0 3px 8px rgba(0,0,0,0.45); }
+            50%      { box-shadow: 0 0 0 3px var(--theme-mint), 0 0 14px rgba(172,254,248,0.6); }
+        }
+        /* 스와이프 방향 힌트 */
+        .tile.swipe-preview { opacity: 0.65; transform: scale(0.94); }
+
+        .tile.matched {
+            animation: matchPop 0.32s ease-out forwards;
+            pointer-events: none;
+        }
+        @keyframes matchPop {
+            0%   { transform: scale(1);    opacity: 1; }
+            40%  { transform: scale(1.28); opacity: 0.85; }
+            100% { transform: scale(0);    opacity: 0; }
+        }
+        .tile.falling { animation: fallIn 0.22s cubic-bezier(0.22,1,0.36,1); }
+        @keyframes fallIn {
+            from { transform: translateY(-22px) scale(0.82); opacity: 0.25; }
+            to   { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .tile.bad-swap { animation: shake 0.28s ease; }
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            25%     { transform: translateX(-7px); }
+            75%     { transform: translateX(7px); }
+        }
+
+        /* ── Active members strip ── */
+        #activeMembersRow {
+            display: flex; gap: 6px; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .active-member-chip { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+        .active-member-icon {
+            border-radius: 10px; overflow: hidden; border: 2px solid;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4); flex-shrink: 0;
+        }
+        .active-member-icon img { display: block; object-fit: cover; object-position: center top; width: 100%; height: 100%; }
+        .active-member-name { font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.55); white-space: nowrap; }
+
+        /* ── Buttons ── */
+        .suika-btn {
+            background: rgba(255,255,255,0.1); color: white;
+            border: 2px solid var(--border-color); border-radius: 8px;
+            padding: 9px 20px; font-size: 14px; font-weight: 900;
+            font-family: 'Noto Sans KR', sans-serif;
+            cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+        }
+        .suika-btn:hover {
+            background: rgba(255,255,255,0.2); border-color: var(--theme-mint);
+            box-shadow: 0 0 14px rgba(172,254,248,0.35);
+        }
+        .suika-btn-primary {
+            background: var(--theme-mint); border-color: var(--theme-mint); color: var(--bg-dark);
+        }
+        .suika-btn-primary:hover {
+            background: #8de5dd; border-color: #8de5dd;
+            box-shadow: 0 0 20px rgba(172,254,248,0.5);
+        }
+
+        /* ── Modals ── */
+        .modal-bd {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.82); backdrop-filter: blur(6px);
+            z-index: 200; align-items: center; justify-content: center; padding: 16px;
+        }
+        .modal-bd.active { display: flex; }
+        .modal-card {
+            background: var(--panel-bg); border: 2px solid var(--border-color);
+            border-radius: 18px; padding: 28px 24px; text-align: center;
+            min-width: 260px; max-width: 340px; width: 100%;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+        }
+
+        /* ── Floating popups ── */
+        .score-popup, .time-popup {
+            position: fixed; font-weight: 900;
+            font-family: 'Noto Sans KR', sans-serif;
+            pointer-events: none; z-index: 500;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+            animation: floatUp 0.85s ease-out forwards;
+        }
+        .score-popup { color: var(--theme-mint); transform: translate(-50%,0); }
+        .time-popup  { color: #4ade80; transform: translate(-50%,0); }
+        @keyframes floatUp {
+            0%   { opacity:1; transform:translate(-50%,0)    scale(0.8); }
+            60%  { opacity:1; transform:translate(-50%,-46px) scale(1.1); }
+            100% { opacity:0; transform:translate(-50%,-84px) scale(1); }
+        }
+    </style>
+</head>
+<body>
+<div class="menu-bg"></div>
+
+<!-- ══════════ Loading / Start ══════════ -->
+<div id="loadingOverlay">
+    <div id="loadingContent" style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+        <div class="spinner"></div>
+        <p style="color:rgba(255,255,255,0.55);font-size:17px;font-weight:700;letter-spacing:0.1em;">
+            로딩 중… <span id="loadProgress" style="color:white;">0/12</span>
+        </p>
+    </div>
+
+    <div id="startContent">
+        <h1 style="font-family:'Jua',sans-serif;
+                   font-size:clamp(2.6rem,9vw,4rem);
+                   text-align:center;color:white;
+                   text-shadow:0 0 30px rgba(172,254,248,0.65),0 2px 12px rgba(0,0,0,0.8);
+                   margin-bottom:8px;line-height:1.05;">
+            천타버스<br><span style="color:var(--theme-mint);">팡팡</span>
+        </h1>
+        <p style="color:rgba(255,255,255,0.5);font-size:12px;font-weight:700;
+                  letter-spacing:0.06em;margin-bottom:20px;text-align:center;">
+            ⏱ 60초 &nbsp;·&nbsp; 매판 랜덤 6인 &nbsp;·&nbsp; 매치로 시간 획득!
+        </p>
+
+        <!-- 12인 그리드: 6개씩 두 줄 -->
+        <div id="chibiStrip" class="chibi-grid-6" style="margin-bottom:22px;"></div>
+
+        <button class="suika-btn suika-btn-primary"
+                style="font-size:1.15rem;padding:14px 48px;margin-bottom:10px;
+                       box-shadow:0 0 24px rgba(172,254,248,0.4);"
+                onclick="initAndStart()">게임 시작</button>
+        <p style="color:rgba(255,255,255,0.28);font-size:11px;margin-top:4px;text-align:center;">
+            같은 멤버 3개 이상을 이어서 터트리세요!
+        </p>
+    </div>
+</div>
+
+<!-- ══════════ Game ══════════ -->
+<div id="gameWrapper">
+    <h1 style="font-family:'Jua',sans-serif;font-size:clamp(1rem,4vw,1.7rem);
+               color:white;letter-spacing:0.06em;flex-shrink:0;">
+        천타버스 <span style="color:var(--theme-mint);">팡팡</span>
+    </h1>
+
+    <div class="score-row">
+        <div class="score-card">
+            <div class="score-label">SCORE</div>
+            <div class="score-value" id="scoreDisplay">0</div>
+        </div>
+        <div class="score-card">
+            <div class="score-label">BEST</div>
+            <div class="score-value" id="bestDisplay">0</div>
+        </div>
+        <div class="timer-card" id="timerCard">
+            <div class="score-label">TIME</div>
+            <div id="timerDisplay">60</div>
+        </div>
+    </div>
+
+    <!-- 타이머 게이지 바 -->
+    <div id="timerBarWrap"><div id="timerBarFill"></div></div>
+
+    <div id="chainDisplay"></div>
+
+    <div id="boardWrapper">
+        <div id="board"></div>
+    </div>
+
+    <div id="activeMembersRow"></div>
+
+    <div style="display:flex;gap:10px;flex-shrink:0;">
+        <button class="suika-btn" onclick="openRestartModal()">🔄 다시하기</button>
+    </div>
+</div>
+
+<!-- ══════════ Game Over ══════════ -->
+<div id="gameOverModal" class="modal-bd">
+    <div class="modal-card">
+        <h2 style="font-size:2rem;font-weight:900;color:#ef4444;margin-bottom:4px;">TIME UP!</h2>
+        <p style="color:rgba(255,255,255,0.45);font-size:12px;margin-bottom:4px;letter-spacing:0.12em;">FINAL SCORE</p>
+        <p id="finalScore" style="font-size:3rem;font-weight:900;color:var(--theme-mint);line-height:1;margin-bottom:4px;">0</p>
+
+        <!-- 활성 6인 그리드: 3개씩 두 줄 -->
+        <div id="gameOverMembers" class="chibi-grid-3"></div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+            <button class="suika-btn suika-btn-primary"
+                    style="font-size:1.05rem;padding:12px;" onclick="initAndStart()">다시 하기</button>
+            <button class="suika-btn"
+                    style="font-size:0.95rem;padding:10px;" onclick="goToMenu()">메인 화면</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════ Restart Confirm ══════════ -->
+<div id="restartModal" class="modal-bd">
+    <div class="modal-card">
+        <h2 style="font-size:1.4rem;font-weight:900;color:white;margin-bottom:10px;">다시 시작하시겠습니까?</h2>
+        <p style="color:rgba(255,255,255,0.4);font-size:13px;margin-bottom:20px;">현재 게임이 종료됩니다.</p>
+        <div style="display:flex;gap:10px;">
+            <button class="suika-btn" style="flex:1;padding:12px;" onclick="closeRestartModal()">취소</button>
+            <button class="suika-btn suika-btn-primary" style="flex:1;padding:12px;" onclick="initAndStart()">확인</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   DATA
+═══════════════════════════════════════════ */
+const ALL_MEMBERS = [
+    { name: '천양',   file: '01.png', color: '#43EAF6' },
+    { name: '마다옴', file: '02.png', color: '#FFF5C3' },
+    { name: '나나문', file: '03.png', color: '#C8CAFF' },
+    { name: '임하밍', file: '04.png', color: '#F8DBFF' },
+    { name: '문모모', file: '05.png', color: '#A868FB' },
+    { name: '체비',   file: '06.png', color: '#c0bec4' },
+    { name: '카푸',   file: '07.png', color: '#FFCFB7' },
+    { name: '캬앙',   file: '08.png', color: '#FF5A4D' },
+    { name: '김웰로', file: '09.png', color: '#BFEF90' },
+    { name: '모카',   file: '10.png', color: '#5E8EFF' },
+    { name: '달타',   file: '11.png', color: '#FFC462' },
+    { name: '플리',   file: '12.png', color: '#b8e1f5' },
+];
+
+const ROWS = 8, COLS = 8;
+const GAME_TIME_START = 60;
+const GAME_TIME_MAX   = 90;
+// 매치 길이별 시간 보너스
+const TIME_BONUS = { 3: 2, 4: 3 }; // 5이상 → 5초
+const BASE_URL = './';
+
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+let activeMembers = [];
+let board         = [];
+let selected      = null;
+let score         = 0;
+let bestScore     = parseInt(localStorage.getItem('chunta_ppang_best') || '0', 10);
+let isBusy        = false;
+let gamePaused    = false;
+let tileSize      = 60;
+
+let timerInterval = null;
+let timeLeft      = GAME_TIME_START;
+
+let bgm      = null;
+let audioCtx = null;
+
+// 터치 스와이프 추적
+let touchOrigin = null; // { x, y, r, c }
+
+let loadedCount = 0;
+
+/* ═══════════════════════════════════════════
+   AUDIO — Web Audio API 효과음
+═══════════════════════════════════════════ */
+function getCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+}
+
+function sfx(type, extra = {}) {
+    try {
+        const ctx = getCtx();
+        const now = ctx.currentTime;
+        const node = (t, f) => { const o = ctx.createOscillator(); o.type=t; o.frequency.setValueAtTime(f,now); return o; };
+        const gn   = v  => { const g = ctx.createGain(); g.gain.setValueAtTime(v,now); return g; };
+        const run  = (o,g,dur,end=0.01) => { o.connect(g); g.connect(ctx.destination); g.gain.exponentialRampToValueAtTime(end,now+dur); o.start(now); o.stop(now+dur+0.01); };
+
+        switch (type) {
+            case 'select': {
+                const o=node('sine',900), g=gn(0.22);
+                o.frequency.exponentialRampToValueAtTime(680, now+0.07);
+                run(o,g,0.08); break;
+            }
+            case 'swap': {
+                const o=node('sine',350), g=gn(0.28);
+                o.frequency.exponentialRampToValueAtTime(560, now+0.13);
+                run(o,g,0.14); break;
+            }
+            case 'invalid': {
+                const o=node('square',160), g=gn(0.18);
+                o.frequency.exponentialRampToValueAtTime(100, now+0.18);
+                run(o,g,0.2); break;
+            }
+            case 'match': {
+                const n=extra.count||3, base=480+n*45;
+                [0,0.06].forEach((d,i)=>{
+                    const o=ctx.createOscillator(), g=ctx.createGain();
+                    o.type='triangle';
+                    o.frequency.setValueAtTime(base*(i?1.25:1), now+d);
+                    o.frequency.exponentialRampToValueAtTime(base*(i?1.6:1.35), now+d+0.18);
+                    g.gain.setValueAtTime(0.32-i*0.08, now+d);
+                    g.gain.exponentialRampToValueAtTime(0.01, now+d+0.22);
+                    o.connect(g); g.connect(ctx.destination);
+                    o.start(now+d); o.stop(now+d+0.25);
+                }); break;
+            }
+            case 'time_bonus': {
+                // 밝은 상승음 (시간 획득)
+                const o=node('sine',600), g=gn(0.24);
+                o.frequency.exponentialRampToValueAtTime(1100, now+0.18);
+                run(o,g,0.2); break;
+            }
+            case 'combo': {
+                const chain=extra.chain||1, root=440*Math.pow(1.18,chain-1);
+                [0,3,7].forEach((semi,i)=>{
+                    const freq=root*Math.pow(2,semi/12);
+                    const o=ctx.createOscillator(), g=ctx.createGain();
+                    o.type='sine'; o.frequency.setValueAtTime(freq, now+i*0.055);
+                    g.gain.setValueAtTime(0.26, now+i*0.055);
+                    g.gain.exponentialRampToValueAtTime(0.01, now+i*0.055+0.28);
+                    o.connect(g); g.connect(ctx.destination);
+                    o.start(now+i*0.055); o.stop(now+i*0.055+0.3);
+                }); break;
+            }
+            case 'tick': {
+                const o=node('square',1400), g=gn(0.12);
+                run(o,g,0.045); break;
+            }
+            case 'gameover': {
+                const o=node('sawtooth',280), g=gn(0.38);
+                o.frequency.exponentialRampToValueAtTime(60, now+0.9);
+                run(o,g,0.95); break;
+            }
+            case 'start': {
+                [[0,523],[0.1,659],[0.2,784],[0.32,1047]].forEach(([t,f])=>{
+                    const o=ctx.createOscillator(), g=ctx.createGain();
+                    o.type='triangle'; o.frequency.setValueAtTime(f, now+t);
+                    g.gain.setValueAtTime(0.22, now+t);
+                    g.gain.exponentialRampToValueAtTime(0.01, now+t+0.18);
+                    o.connect(g); g.connect(ctx.destination);
+                    o.start(now+t); o.stop(now+t+0.2);
+                }); break;
+            }
+        }
+    } catch(e) {}
+}
+
+/* ═══════════════════════════════════════════
+   BGM
+═══════════════════════════════════════════ */
+function initBGM() {
+    if (!bgm) { bgm = new Audio('./chuntaverse.mp3'); bgm.loop=true; bgm.volume=0.42; }
+    bgm.currentTime = 0;
+    bgm.play().catch(()=>{});
+}
+function stopBGM() { if (bgm) { bgm.pause(); bgm.currentTime=0; } }
+
+/* ═══════════════════════════════════════════
+   PRELOAD
+═══════════════════════════════════════════ */
+function preload() {
+    ALL_MEMBERS.forEach(m => {
+        const img = new Image();
+        img.onload = img.onerror = () => {
+            loadedCount++;
+            document.getElementById('loadProgress').textContent = `${loadedCount}/12`;
+            if (loadedCount === ALL_MEMBERS.length) onReady();
+        };
+        img.src = BASE_URL + m.file;
+    });
+}
+
+function onReady() {
+    document.getElementById('loadingContent').style.display = 'none';
+    buildChibiGrid();
+    document.getElementById('startContent').style.display = 'flex';
+}
+
+/* 시작화면 6×2 그리드 */
+function buildChibiGrid() {
+    const strip = document.getElementById('chibiStrip');
+    strip.innerHTML = '';
+    ALL_MEMBERS.forEach(m => {
+        const wrap = document.createElement('div');
+        wrap.className = 'chibi-tile';
+        wrap.style.cssText = `width:52px;height:52px;border-color:${m.color};background:${m.color};`;
+        const img = document.createElement('img');
+        img.src = BASE_URL + m.file; img.title = m.name;
+        wrap.appendChild(img);
+        strip.appendChild(wrap);
+    });
+}
+
+/* 게임오버 3×2 그리드 */
+function buildGameOverGrid() {
+    const el = document.getElementById('gameOverMembers');
+    el.innerHTML = '';
+    activeMembers.forEach(m => {
+        const wrap = document.createElement('div');
+        wrap.className = 'chibi-tile';
+        wrap.style.cssText = `width:60px;height:60px;border-color:${m.color};background:${m.color};`;
+        const img = document.createElement('img');
+        img.src = BASE_URL + m.file; img.alt = m.name;
+        wrap.appendChild(img);
+        el.appendChild(wrap);
+    });
+}
+
+/* ═══════════════════════════════════════════
+   ACTIVE MEMBER SELECTION — 매판 랜덤 6인
+═══════════════════════════════════════════ */
+function selectActiveMembers() {
+    activeMembers = [...ALL_MEMBERS].sort(() => Math.random() - 0.5).slice(0, 6);
+}
+function randType() { return Math.floor(Math.random() * activeMembers.length); }
+
+/* ═══════════════════════════════════════════
+   BOARD INIT
+═══════════════════════════════════════════ */
+function initBoard() {
+    board = [];
+    for (let r = 0; r < ROWS; r++) {
+        board[r] = [];
+        for (let c = 0; c < COLS; c++) {
+            let t;
+            do {
+                t = randType();
+            } while (
+                (c >= 2 && board[r][c-1]===t && board[r][c-2]===t) ||
+                (r >= 2 && board[r-1][c]===t && board[r-2][c]===t)
+            );
+            board[r][c] = t;
+        }
+    }
+}
+
+/* ═══════════════════════════════════════════
+   MATCH DETECTION — 개별 런 길이도 반환
+═══════════════════════════════════════════ */
+function findMatches() {
+    const hit    = Array.from({length:ROWS}, () => new Array(COLS).fill(false));
+    const groups = []; // 각 run 길이 배열
+
+    // 가로 runs
+    for (let r = 0; r < ROWS; r++) {
+        let c = 0;
+        while (c < COLS - 2) {
+            const t = board[r][c];
+            if (t !== null && t === board[r][c+1] && t === board[r][c+2]) {
+                let end = c + 2;
+                while (end+1 < COLS && board[r][end+1] === t) end++;
+                for (let i = c; i <= end; i++) hit[r][i] = true;
+                groups.push(end - c + 1);
+                c = end + 1;
+            } else { c++; }
+        }
+    }
+
+    // 세로 runs
+    for (let c = 0; c < COLS; c++) {
+        let r = 0;
+        while (r < ROWS - 2) {
+            const t = board[r][c];
+            if (t !== null && t === board[r+1][c] && t === board[r+2][c]) {
+                let end = r + 2;
+                while (end+1 < ROWS && board[end+1][c] === t) end++;
+                for (let i = r; i <= end; i++) hit[i][c] = true;
+                groups.push(end - r + 1);
+                r = end + 1;
+            } else { r++; }
+        }
+    }
+
+    return { hit, groups };
+}
+
+function hitCount(hit) { return hit.flat().filter(Boolean).length; }
+
+/* 그룹별 시간 보너스 계산 */
+function calcTimeBonus(groups) {
+    return groups.reduce((sum, len) => {
+        if (len >= 5) return sum + 5;
+        if (len === 4) return sum + 3;
+        if (len >= 3) return sum + 2;
+        return sum;
+    }, 0);
+}
+
+/* ═══════════════════════════════════════════
+   BOARD MUTATION
+═══════════════════════════════════════════ */
+function removeHits(hit) {
+    for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+            if (hit[r][c]) board[r][c] = null;
+}
+
+function dropTiles() {
+    const changed = new Set();
+    for (let c = 0; c < COLS; c++) {
+        let empty = ROWS - 1;
+        for (let r = ROWS-1; r >= 0; r--) {
+            if (board[r][c] !== null) {
+                if (r !== empty) { board[empty][c]=board[r][c]; board[r][c]=null; changed.add(`${empty},${c}`); }
+                empty--;
+            }
+        }
+        for (let r = empty; r >= 0; r--) { board[r][c]=randType(); changed.add(`${r},${c}`); }
+    }
+    return changed;
+}
+
+/* ═══════════════════════════════════════════
+   GAME LOOP
+═══════════════════════════════════════════ */
+async function processBoard(chain) {
+    const { hit, groups } = findMatches();
+    const n = hitCount(hit);
+    if (n === 0) { isBusy = false; return; }
+
+    sfx('match', { count: n });
+    if (chain >= 1) { sfx('combo', { chain }); showChain(chain, n); }
+
+    for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+            if (hit[r][c]) getTileEl(r,c)?.classList.add('matched');
+
+    await wait(340);
+
+    // 점수 + 시간 보너스
+    const pts   = Math.round(n * 10 * (1 + chain * 0.5));
+    const tBonus = calcTimeBonus(groups);
+    addScore(pts, hit);
+    if (tBonus > 0) addTime(tBonus, hit);
+
+    removeHits(hit);
+    const changed = dropTiles();
+    renderBoard();
+
+    changed.forEach(key => {
+        const [r,c] = key.split(',').map(Number);
+        getTileEl(r,c)?.classList.add('falling');
+    });
+
+    await wait(250);
+    await processBoard(chain + 1);
+}
+
+async function doSwap(r1, c1, r2, c2) {
+    isBusy = true;
+    [board[r1][c1], board[r2][c2]] = [board[r2][c2], board[r1][c1]];
+    renderBoard();
+
+    const { hit } = findMatches();
+    if (hitCount(hit) === 0) {
+        sfx('invalid');
+        await wait(180);
+        [board[r1][c1], board[r2][c2]] = [board[r2][c2], board[r1][c1]];
+        renderBoard();
+        getTileEl(r1,c1)?.classList.add('bad-swap');
+        getTileEl(r2,c2)?.classList.add('bad-swap');
+        await wait(300);
+        isBusy = false;
+    } else {
+        sfx('swap');
+        await processBoard(0);
+    }
+}
+
+/* ═══════════════════════════════════════════
+   TIMER
+═══════════════════════════════════════════ */
+function startTimer() {
+    clearInterval(timerInterval);
+    timeLeft = GAME_TIME_START;
+    updateTimerUI();
+
+    timerInterval = setInterval(() => {
+        if (gamePaused) return;
+        timeLeft--;
+        updateTimerUI();
+        if (timeLeft <= 10 && timeLeft > 0) sfx('tick');
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            sfx('gameover');
+            isBusy = true;
+            setTimeout(showGameOver, 500);
+        }
+    }, 1000);
+}
+
+function stopTimer() { clearInterval(timerInterval); timerInterval = null; }
+
+function addTime(bonus, hit) {
+    const before = timeLeft;
+    timeLeft = Math.min(GAME_TIME_MAX, timeLeft + bonus);
+    const actual = timeLeft - before;
+    if (actual <= 0) return;
+    sfx('time_bonus');
+    updateTimerUI();
+    // 팝업: 시간 획득 표시
+    if (hit) {
+        outer:
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (hit[r][c]) {
+                    const el = getTileEl(r,c);
+                    if (el) {
+                        const rect = el.getBoundingClientRect();
+                        spawnPopup(rect.left + rect.width/2, rect.top, `+${actual}초`, 'time-popup');
+                    }
+                    break outer;
+                }
+            }
+        }
+    }
+}
+
+function updateTimerUI() {
+    const pct  = (timeLeft / GAME_TIME_MAX) * 100;
+    const fill = document.getElementById('timerBarFill');
+    const el   = document.getElementById('timerDisplay');
+    const card = document.getElementById('timerCard');
+
+    fill.style.width = pct + '%';
+
+    const isWarn   = timeLeft <= 20 && timeLeft > 10;
+    const isDanger = timeLeft <= 10;
+
+    fill.classList.toggle('warn',   isWarn);
+    fill.classList.toggle('danger', isDanger);
+    el.classList.toggle('warn',   isWarn);
+    el.classList.toggle('danger', isDanger);
+    card.classList.toggle('warn',   isWarn);
+    card.classList.toggle('danger', isDanger);
+
+    el.textContent = timeLeft;
+}
+
+/* ═══════════════════════════════════════════
+   INPUT — 클릭(PC) + 스와이프(모바일)
+═══════════════════════════════════════════ */
+function onTileClick(r, c) {
+    if (isBusy || timeLeft <= 0 || gamePaused) return;
+
+    if (!selected) {
+        sfx('select');
+        selected = { r, c };
+        renderBoard();
+        [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc]) => {
+            const nr=r+dr, nc=c+dc;
+            if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) getTileEl(nr,nc)?.classList.add('hint-adj');
+        });
+        return;
+    }
+
+    const { r:sr, c:sc } = selected;
+    if (sr===r && sc===c) { selected=null; renderBoard(); return; }
+
+    const dr=Math.abs(r-sr), dc=Math.abs(c-sc);
+    if ((dr===1&&dc===0)||(dr===0&&dc===1)) {
+        selected=null; renderBoard(); doSwap(sr,sc,r,c);
+    } else {
+        sfx('select');
+        selected={r,c}; renderBoard();
+    }
+}
+
+/* ── 터치 스와이프 핸들러 ── */
+function onTouchStartTile(e, r, c) {
+    e.preventDefault();
+    if (isBusy || timeLeft <= 0 || gamePaused) return;
+    const t = e.touches[0];
+    touchOrigin = { x: t.clientX, y: t.clientY, r, c };
+    // 선택 시각 피드백
+    sfx('select');
+    selected = { r, c };
+    renderBoard();
+}
+
+function onTouchEndTile(e, r, c) {
+    e.preventDefault();
+    if (!touchOrigin || isBusy || timeLeft <= 0 || gamePaused) { touchOrigin=null; return; }
+
+    const t   = e.changedTouches[0];
+    const dx  = t.clientX - touchOrigin.x;
+    const dy  = t.clientY - touchOrigin.y;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    const threshold = Math.max(tileSize * 0.22, 8);
+
+    const { r:sr, c:sc } = touchOrigin;
+    touchOrigin = null;
+
+    if (Math.max(adx, ady) < threshold) {
+        // 짧은 탭 → 기존 클릭 로직으로
+        onTileClick(sr, sc);
+        return;
+    }
+
+    // 스와이프 방향 결정
+    let dr=0, dc=0;
+    if (adx > ady) dc = dx > 0 ? 1 : -1;
+    else            dr = dy > 0 ? 1 : -1;
+
+    const nr = sr+dr, nc = sc+dc;
+    selected = null;
+    renderBoard();
+
+    if (nr>=0 && nr<ROWS && nc>=0 && nc<COLS) {
+        doSwap(sr, sc, nr, nc);
+    }
+}
+
+/* ═══════════════════════════════════════════
+   RENDERING
+═══════════════════════════════════════════ */
+function calcTileSize() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const overhead = 250; // title+scores+timerbar+chain+members+btn+gaps
+    const availH = vh - overhead - 6*2 - 4*7;
+    const availW = vw - 28  - 6*2 - 4*7;
+    tileSize = Math.max(34, Math.floor(Math.min(availH/8, availW/8, 72)));
+
+    // 게이지 너비 = 보드 실제 너비
+    const boardPx = tileSize*8 + 4*7 + 6*2;
+    document.getElementById('timerBarWrap').style.width = boardPx + 'px';
+}
+
+function renderBoard() {
+    const el = document.getElementById('board');
+    el.style.setProperty('--tile-size', tileSize + 'px');
+    el.innerHTML = '';
+
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            const type = board[r][c];
+
+            if (type === null) {
+                const ph = document.createElement('div');
+                ph.style.cssText = `width:${tileSize}px;height:${tileSize}px;`;
+                el.appendChild(ph); continue;
+            }
+
+            const m    = activeMembers[type];
+            const tile = document.createElement('div');
+            tile.className = 'tile';
+            tile.style.cssText = `
+                width:${tileSize}px;height:${tileSize}px;
+                background:${m.color};border-color:${m.color};
+                --member-color:${m.color};
+            `;
+            tile.dataset.r = r;
+            tile.dataset.c = c;
+
+            const img = document.createElement('img');
+            img.src = BASE_URL + m.file; img.alt = m.name; img.draggable = false;
+            tile.appendChild(img);
+
+            if (selected && selected.r===r && selected.c===c)
+                tile.classList.add('selected');
+
+            // PC: 클릭
+            tile.addEventListener('click', () => onTileClick(r, c));
+            // 모바일: 스와이프
+            tile.addEventListener('touchstart', e => onTouchStartTile(e, r, c), { passive:false });
+            tile.addEventListener('touchend',   e => onTouchEndTile(e, r, c),   { passive:false });
+            tile.addEventListener('touchmove',  e => e.preventDefault(),          { passive:false });
+
+            el.appendChild(tile);
+        }
+    }
+}
+
+function getTileEl(r, c) {
+    return document.querySelector(`.tile[data-r="${r}"][data-c="${c}"]`);
+}
+
+/* ── Active 6인 strip ── */
+function buildActiveMembersRow() {
+    const row      = document.getElementById('activeMembersRow');
+    const iconSize = Math.max(26, Math.min(40, Math.round(tileSize * 0.55)));
+    row.innerHTML  = '';
+
+    activeMembers.forEach(m => {
+        const chip = document.createElement('div');
+        chip.className = 'active-member-chip';
+
+        const icon = document.createElement('div');
+        icon.className = 'active-member-icon';
+        icon.style.cssText = `width:${iconSize}px;height:${iconSize}px;border-color:${m.color};background:${m.color};`;
+        const img = document.createElement('img');
+        img.src = BASE_URL + m.file; img.alt = m.name;
+        icon.appendChild(img);
+
+        const name = document.createElement('div');
+        name.className = 'active-member-name';
+        name.textContent = m.name;
+
+        chip.appendChild(icon);
+        chip.appendChild(name);
+        row.appendChild(chip);
+    });
+}
+
+/* ═══════════════════════════════════════════
+   UI HELPERS
+═══════════════════════════════════════════ */
+function updateScoreUI() {
+    document.getElementById('scoreDisplay').textContent = score;
+    document.getElementById('bestDisplay').textContent  = bestScore;
+}
+
+function addScore(pts, hit) {
+    score += pts;
+    if (score > bestScore) { bestScore = score; localStorage.setItem('chunta_ppang_best', bestScore); }
+    updateScoreUI();
+    if (!hit) return;
+    outer:
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (hit[r][c]) {
+                const el = getTileEl(r,c);
+                if (el) {
+                    const rect = el.getBoundingClientRect();
+                    spawnPopup(rect.left+rect.width/2, rect.top, `+${pts}`, 'score-popup');
+                }
+                break outer;
+            }
+        }
+    }
+}
+
+function spawnPopup(x, y, text, cls) {
+    const pop = document.createElement('div');
+    pop.className = cls;
+    pop.style.cssText = `left:${x}px;top:${y}px;font-size:${Math.max(13,tileSize*0.42)}px;`;
+    pop.textContent = text;
+    document.body.appendChild(pop);
+    pop.addEventListener('animationend', () => pop.remove());
+}
+
+let chainTimer = null;
+const CHAIN_MSGS = ['','NICE!','GREAT!','EXCELLENT!','AMAZING!','INCREDIBLE!'];
+function showChain(chain, n) {
+    const el  = document.getElementById('chainDisplay');
+    const msg = chain < CHAIN_MSGS.length ? CHAIN_MSGS[chain] : '🎉 천타버스 FEVER!!';
+    el.textContent = `${msg}  ${chain}콤보`;
+    el.style.opacity = '1';
+    clearTimeout(chainTimer);
+    chainTimer = setTimeout(() => { el.style.opacity = '0'; }, 1700);
+}
+
+/* ═══════════════════════════════════════════
+   LIFECYCLE
+═══════════════════════════════════════════ */
+function initAndStart() {
+    score=0; selected=null; isBusy=false; gamePaused=false; touchOrigin=null;
+
+    closeRestartModal();
+    document.getElementById('gameOverModal').classList.remove('active');
+    document.getElementById('loadingOverlay').style.display  = 'none';
+    document.getElementById('gameWrapper').classList.add('active');
+    document.getElementById('chainDisplay').textContent = '';
+    document.getElementById('chainDisplay').style.opacity = '1';
+
+    calcTileSize();
+    selectActiveMembers();
+    initBoard();
+    renderBoard();
+    buildActiveMembersRow();
+    updateScoreUI();
+    startTimer();
+    initBGM();
+    sfx('start');
+}
+
+function showGameOver() {
+    stopTimer(); stopBGM();
+    document.getElementById('finalScore').textContent = score;
+    buildGameOverGrid();
+    document.getElementById('gameOverModal').classList.add('active');
+}
+
+function goToMenu() {
+    stopTimer(); stopBGM();
+    document.getElementById('gameOverModal').classList.remove('active');
+    document.getElementById('gameWrapper').classList.remove('active');
+    const lo = document.getElementById('loadingOverlay');
+    lo.style.display = 'flex';
+    document.getElementById('loadingContent').style.display = 'none';
+    document.getElementById('startContent').style.display   = 'flex';
+}
+
+function openRestartModal()  { gamePaused=true; document.getElementById('restartModal').classList.add('active'); }
+function closeRestartModal() { document.getElementById('restartModal').classList.remove('active'); gamePaused=false; }
+
+/* ═══════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════ */
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+window.addEventListener('resize', () => {
+    calcTileSize();
+    if (document.getElementById('gameWrapper').classList.contains('active')) {
+        renderBoard(); buildActiveMembersRow();
+    }
+});
+
+window.addEventListener('load', preload);
+</script>
+</body>
+</html>
