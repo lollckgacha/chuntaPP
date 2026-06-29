@@ -305,6 +305,31 @@
             60%  { opacity:1; transform:translate(-50%,-46px) scale(1.1); }
             100% { opacity:0; transform:translate(-50%,-84px) scale(1); }
         }
+
+        /* ── Settings sliders ── */
+        input[type=range] {
+            -webkit-appearance: none; appearance: none;
+            width: 100%; height: 6px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.12);
+            outline: none; cursor: pointer;
+            accent-color: var(--theme-mint);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            background: var(--theme-mint);
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(172,254,248,0.6);
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 22px; height: 22px;
+            border-radius: 50%; border: none;
+            background: var(--theme-mint);
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(172,254,248,0.6);
+        }
     </style>
 </head>
 <body>
@@ -327,10 +352,6 @@
                    margin-bottom:8px;line-height:1.05;">
             천타버스<br><span style="color:var(--theme-mint);">팡팡</span>
         </h1>
-        <p style="color:rgba(255,255,255,0.5);font-size:12px;font-weight:700;
-                  letter-spacing:0.06em;margin-bottom:20px;text-align:center;">
-            ⏱ 60초 &nbsp;·&nbsp; 매판 랜덤 6인 &nbsp;·&nbsp; 매치로 시간 획득!
-        </p>
 
         <!-- 12인 그리드: 6개씩 두 줄 -->
         <div id="chibiStrip" class="chibi-grid-6" style="margin-bottom:22px;"></div>
@@ -339,9 +360,6 @@
                 style="font-size:1.15rem;padding:14px 48px;margin-bottom:10px;
                        box-shadow:0 0 24px rgba(172,254,248,0.4);"
                 onclick="initAndStart()">게임 시작</button>
-        <p style="color:rgba(255,255,255,0.28);font-size:11px;margin-top:4px;text-align:center;">
-            같은 멤버 3개 이상을 이어서 터트리세요!
-        </p>
     </div>
 </div>
 
@@ -380,6 +398,7 @@
 
     <div style="display:flex;gap:10px;flex-shrink:0;">
         <button class="suika-btn" onclick="openRestartModal()">🔄 다시하기</button>
+        <button class="suika-btn" onclick="openSettings()" style="padding:9px 16px;font-size:16px;">⚙️</button>
     </div>
 </div>
 
@@ -390,8 +409,8 @@
         <p style="color:rgba(255,255,255,0.45);font-size:12px;margin-bottom:4px;letter-spacing:0.12em;">FINAL SCORE</p>
         <p id="finalScore" style="font-size:3rem;font-weight:900;color:var(--theme-mint);line-height:1;margin-bottom:4px;">0</p>
 
-        <!-- 활성 6인 그리드: 3개씩 두 줄 -->
-        <div id="gameOverMembers" class="chibi-grid-3"></div>
+        <!-- 활성 7인: 4+3 배치 -->
+        <div id="gameOverMembers"></div>
 
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
             <button class="suika-btn suika-btn-primary"
@@ -399,6 +418,34 @@
             <button class="suika-btn"
                     style="font-size:0.95rem;padding:10px;" onclick="goToMenu()">메인 화면</button>
         </div>
+    </div>
+</div>
+
+<!-- ══════════ Settings ══════════ -->
+<div id="settingsModal" class="modal-bd">
+    <div class="modal-card" style="max-width:300px;">
+        <h2 style="font-size:1.3rem;font-weight:900;color:white;margin-bottom:24px;">⚙️ 설정</h2>
+
+        <div style="text-align:left;margin-bottom:22px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <span style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:700;">🎵 배경음악</span>
+                <span id="bgmVolLabel" style="font-size:14px;color:var(--theme-mint);font-weight:900;min-width:40px;text-align:right;"></span>
+            </div>
+            <input type="range" id="bgmSlider" min="0" max="100" value="42"
+                   oninput="onBGMSlider(this.value)">
+        </div>
+
+        <div style="text-align:left;margin-bottom:28px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <span style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:700;">🔊 효과음</span>
+                <span id="sfxVolLabel" style="font-size:14px;color:var(--theme-mint);font-weight:900;min-width:40px;text-align:right;"></span>
+            </div>
+            <input type="range" id="sfxSlider" min="0" max="100" value="70"
+                   oninput="onSFXSlider(this.value)">
+        </div>
+
+        <button class="suika-btn suika-btn-primary"
+                style="width:100%;padding:12px;font-size:1rem;" onclick="closeSettings()">닫기</button>
     </div>
 </div>
 
@@ -435,9 +482,7 @@ const ALL_MEMBERS = [
 
 const ROWS = 8, COLS = 8;
 const GAME_TIME_START = 60;
-const GAME_TIME_MAX   = 90;
-// 매치 길이별 시간 보너스
-const TIME_BONUS = { 3: 2, 4: 3 }; // 5이상 → 5초
+const GAME_TIME_MAX   = 60;
 const BASE_URL = './';
 
 /* ═══════════════════════════════════════════
@@ -457,6 +502,9 @@ let timeLeft      = GAME_TIME_START;
 
 let bgm      = null;
 let audioCtx = null;
+let sfxMaster = null;
+let bgmVolume = parseFloat(localStorage.getItem('chunta_bgm_vol') ?? '0.42');
+let sfxVolume = parseFloat(localStorage.getItem('chunta_sfx_vol') ?? '0.7');
 
 // 터치 스와이프 추적
 let touchOrigin = null; // { x, y, r, c }
@@ -467,7 +515,12 @@ let loadedCount = 0;
    AUDIO — Web Audio API 효과음
 ═══════════════════════════════════════════ */
 function getCtx() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        sfxMaster = audioCtx.createGain();
+        sfxMaster.gain.setValueAtTime(sfxVolume, 0);
+        sfxMaster.connect(audioCtx.destination);
+    }
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
 }
@@ -476,9 +529,10 @@ function sfx(type, extra = {}) {
     try {
         const ctx = getCtx();
         const now = ctx.currentTime;
+        const dest = sfxMaster || ctx.destination;
         const node = (t, f) => { const o = ctx.createOscillator(); o.type=t; o.frequency.setValueAtTime(f,now); return o; };
         const gn   = v  => { const g = ctx.createGain(); g.gain.setValueAtTime(v,now); return g; };
-        const run  = (o,g,dur,end=0.01) => { o.connect(g); g.connect(ctx.destination); g.gain.exponentialRampToValueAtTime(end,now+dur); o.start(now); o.stop(now+dur+0.01); };
+        const run  = (o,g,dur,end=0.01) => { o.connect(g); g.connect(dest); g.gain.exponentialRampToValueAtTime(end,now+dur); o.start(now); o.stop(now+dur+0.01); };
 
         switch (type) {
             case 'select': {
@@ -505,7 +559,7 @@ function sfx(type, extra = {}) {
                     o.frequency.exponentialRampToValueAtTime(base*(i?1.6:1.35), now+d+0.18);
                     g.gain.setValueAtTime(0.32-i*0.08, now+d);
                     g.gain.exponentialRampToValueAtTime(0.01, now+d+0.22);
-                    o.connect(g); g.connect(ctx.destination);
+                    o.connect(g); g.connect(dest);
                     o.start(now+d); o.stop(now+d+0.25);
                 }); break;
             }
@@ -523,7 +577,7 @@ function sfx(type, extra = {}) {
                     o.type='sine'; o.frequency.setValueAtTime(freq, now+i*0.055);
                     g.gain.setValueAtTime(0.26, now+i*0.055);
                     g.gain.exponentialRampToValueAtTime(0.01, now+i*0.055+0.28);
-                    o.connect(g); g.connect(ctx.destination);
+                    o.connect(g); g.connect(dest);
                     o.start(now+i*0.055); o.stop(now+i*0.055+0.3);
                 }); break;
             }
@@ -542,7 +596,7 @@ function sfx(type, extra = {}) {
                     o.type='triangle'; o.frequency.setValueAtTime(f, now+t);
                     g.gain.setValueAtTime(0.22, now+t);
                     g.gain.exponentialRampToValueAtTime(0.01, now+t+0.18);
-                    o.connect(g); g.connect(ctx.destination);
+                    o.connect(g); g.connect(dest);
                     o.start(now+t); o.stop(now+t+0.2);
                 }); break;
             }
@@ -554,7 +608,8 @@ function sfx(type, extra = {}) {
    BGM
 ═══════════════════════════════════════════ */
 function initBGM() {
-    if (!bgm) { bgm = new Audio('./chuntaverse.mp3'); bgm.loop=true; bgm.volume=0.42; }
+    if (!bgm) { bgm = new Audio('./chuntaverse.mp3'); bgm.loop=true; }
+    bgm.volume = bgmVolume;
     bgm.currentTime = 0;
     bgm.play().catch(()=>{});
 }
@@ -596,26 +651,36 @@ function buildChibiGrid() {
     });
 }
 
-/* 게임오버 3×2 그리드 */
+/* 게임오버 4+3 배치 */
 function buildGameOverGrid() {
     const el = document.getElementById('gameOverMembers');
     el.innerHTML = '';
-    activeMembers.forEach(m => {
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:9px;';
+
+    const row1 = document.createElement('div');
+    row1.style.cssText = 'display:flex;gap:9px;';
+    const row2 = document.createElement('div');
+    row2.style.cssText = 'display:flex;gap:9px;';
+
+    activeMembers.forEach((m, i) => {
         const wrap = document.createElement('div');
         wrap.className = 'chibi-tile';
-        wrap.style.cssText = `width:60px;height:60px;border-color:${m.color};background:${m.color};`;
+        wrap.style.cssText = `width:54px;height:54px;border-color:${m.color};background:${m.color};`;
         const img = document.createElement('img');
         img.src = BASE_URL + m.file; img.alt = m.name;
         wrap.appendChild(img);
-        el.appendChild(wrap);
+        (i < 4 ? row1 : row2).appendChild(wrap);
     });
+
+    el.appendChild(row1);
+    el.appendChild(row2);
 }
 
 /* ═══════════════════════════════════════════
    ACTIVE MEMBER SELECTION — 매판 랜덤 6인
 ═══════════════════════════════════════════ */
 function selectActiveMembers() {
-    activeMembers = [...ALL_MEMBERS].sort(() => Math.random() - 0.5).slice(0, 6);
+    activeMembers = [...ALL_MEMBERS].sort(() => Math.random() - 0.5).slice(0, 7);
 }
 function randType() { return Math.floor(Math.random() * activeMembers.length); }
 
@@ -684,9 +749,9 @@ function hitCount(hit) { return hit.flat().filter(Boolean).length; }
 /* 그룹별 시간 보너스 계산 */
 function calcTimeBonus(groups) {
     return groups.reduce((sum, len) => {
-        if (len >= 5) return sum + 5;
-        if (len === 4) return sum + 3;
-        if (len >= 3) return sum + 2;
+        if (len >= 5) return sum + 2;
+        if (len === 4) return sum + 1;
+        if (len >= 3) return sum + 0.5;
         return sum;
     }, 0);
 }
@@ -732,11 +797,11 @@ async function processBoard(chain) {
 
     await wait(340);
 
-    // 점수 + 시간 보너스
-    const pts   = Math.round(n * 10 * (1 + chain * 0.5));
-    const tBonus = calcTimeBonus(groups);
+    // 점수 + 시간 보너스 (콤보 체인에는 시간 보너스 없음)
+    const pts    = Math.round(n * 10 * (1 + chain * 0.5));
+    const tBonus = chain === 0 ? calcTimeBonus(groups) : 0;
     addScore(pts, hit);
-    if (tBonus > 0) addTime(tBonus, hit);
+    if (tBonus > 0) addTime(tBonus);
 
     removeHits(hit);
     const changed = dropTiles();
@@ -796,29 +861,12 @@ function startTimer() {
 
 function stopTimer() { clearInterval(timerInterval); timerInterval = null; }
 
-function addTime(bonus, hit) {
+function addTime(bonus) {
     const before = timeLeft;
     timeLeft = Math.min(GAME_TIME_MAX, timeLeft + bonus);
-    const actual = timeLeft - before;
-    if (actual <= 0) return;
+    if (timeLeft <= before) return;
     sfx('time_bonus');
     updateTimerUI();
-    // 팝업: 시간 획득 표시
-    if (hit) {
-        outer:
-        for (let r = 0; r < ROWS; r++) {
-            for (let c = 0; c < COLS; c++) {
-                if (hit[r][c]) {
-                    const el = getTileEl(r,c);
-                    if (el) {
-                        const rect = el.getBoundingClientRect();
-                        spawnPopup(rect.left + rect.width/2, rect.top, `+${actual}초`, 'time-popup');
-                    }
-                    break outer;
-                }
-            }
-        }
-    }
 }
 
 function updateTimerUI() {
@@ -839,7 +887,7 @@ function updateTimerUI() {
     card.classList.toggle('warn',   isWarn);
     card.classList.toggle('danger', isDanger);
 
-    el.textContent = timeLeft;
+    el.textContent = Math.ceil(timeLeft);
 }
 
 /* ═══════════════════════════════════════════
@@ -1098,6 +1146,40 @@ function goToMenu() {
 
 function openRestartModal()  { gamePaused=true; document.getElementById('restartModal').classList.add('active'); }
 function closeRestartModal() { document.getElementById('restartModal').classList.remove('active'); gamePaused=false; }
+
+/* ═══════════════════════════════════════════
+   SETTINGS
+═══════════════════════════════════════════ */
+function openSettings() {
+    const bgmPct = Math.round(bgmVolume * 100);
+    const sfxPct = Math.round(sfxVolume * 100);
+    document.getElementById('bgmSlider').value   = bgmPct;
+    document.getElementById('sfxSlider').value   = sfxPct;
+    document.getElementById('bgmVolLabel').textContent = bgmPct + '%';
+    document.getElementById('sfxVolLabel').textContent = sfxPct + '%';
+    document.getElementById('settingsModal').classList.add('active');
+    gamePaused = true;
+}
+
+function closeSettings() {
+    document.getElementById('settingsModal').classList.remove('active');
+    gamePaused = false;
+}
+
+function onBGMSlider(val) {
+    bgmVolume = val / 100;
+    if (bgm) bgm.volume = bgmVolume;
+    localStorage.setItem('chunta_bgm_vol', bgmVolume);
+    document.getElementById('bgmVolLabel').textContent = val + '%';
+}
+
+function onSFXSlider(val) {
+    sfxVolume = val / 100;
+    if (sfxMaster) sfxMaster.gain.setValueAtTime(sfxVolume, sfxMaster.context.currentTime);
+    localStorage.setItem('chunta_sfx_vol', sfxVolume);
+    document.getElementById('sfxVolLabel').textContent = val + '%';
+    sfx('select'); // 미리듣기
+}
 
 /* ═══════════════════════════════════════════
    UTILS
