@@ -730,17 +730,81 @@ function initFirebase() {
     try {
         if (firebaseConfig.apiKey === 'YOUR_API_KEY') return;
         firebase.initializeApp(firebaseConfig);
-        // WebSocket이 방화벽/백신에 막힐 경우 HTTP Long Polling으로 자동 전환
-        firebase.firestore().settings({ experimentalAutoDetectLongPolling: true, merge: true });
         firebase.auth().onAuthStateChanged(onAuthChange);
-        // 리다이렉트 로그인 결과 처리
         firebase.auth().getRedirectResult().catch(e => {
             if (e.code === 'auth/unauthorized-domain') {
-                alert('Firebase 승인된 도메인에 이 주소를 추가해주세요.\nAuthentication → 승인된 도메인');
+                alert('Firebase 콘솔 → Authentication → 승인된 도메인에\n현재 주소(' + location.hostname + ')를 추가해주세요.');
             }
         });
         firebaseReady = true;
     } catch(e) { console.warn('Firebase init:', e.message); }
+}
+
+/* ═══════════════════════════════════════════
+   FIRESTORE REST API
+   SDK WebSocket 대신 HTTPS fetch 직접 호출 — 방화벽 환경에서도 동작
+═══════════════════════════════════════════ */
+function fsBase() {
+    return `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+}
+async function fsToken() {
+    return currentUser.getIdToken();
+}
+async function fsGet(col, id) {
+    const r = await fetch(`${fsBase()}/${col}/${encodeURIComponent(id)}`,
+        { headers: { Authorization: `Bearer ${await fsToken()}` } });
+    if (r.status === 404) return null;
+    if (!r.ok) throw await fsMkErr(r);
+    return r.json();
+}
+async function fsPatch(col, id, fields, mask) {
+    const qs = mask ? '?' + mask.map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join('&') : '';
+    const r = await fetch(`${fsBase()}/${col}/${encodeURIComponent(id)}${qs}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${await fsToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+    });
+    if (!r.ok) throw await fsMkErr(r);
+}
+async function fsDel(col, id) {
+    const r = await fetch(`${fsBase()}/${col}/${encodeURIComponent(id)}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${await fsToken()}` } });
+    if (!r.ok && r.status !== 404) throw await fsMkErr(r);
+}
+async function fsQuery(col, field, val) {
+    const r = await fetch(`${fsBase()}:runQuery`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${await fsToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ structuredQuery: {
+            from: [{ collectionId: col }],
+            where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: val } } },
+            limit: 100,
+        }}),
+    });
+    if (!r.ok) throw await fsMkErr(r);
+    const rows = await r.json();
+    return rows.filter(x => x.document).map(x => fsFields(x.document.fields));
+}
+async function fsMkErr(r) {
+    const b = await r.json().catch(() => ({}));
+    const status = (b.error?.status || '').toLowerCase().replace(/_/g, '-');
+    return Object.assign(new Error(b.error?.message || `HTTP ${r.status}`), { code: status || `http-${r.status}` });
+}
+function fsV(v) {
+    if (typeof v === 'string')  return { stringValue: v };
+    if (typeof v === 'boolean') return { booleanValue: v };
+    if (typeof v === 'number')  return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+    return { nullValue: null };
+}
+function fsFields(f) {
+    if (!f) return {};
+    return Object.fromEntries(Object.entries(f).map(([k, v]) => {
+        if ('stringValue'  in v) return [k, v.stringValue];
+        if ('integerValue' in v) return [k, parseInt(v.integerValue)];
+        if ('doubleValue'  in v) return [k, v.doubleValue];
+        if ('booleanValue' in v) return [k, v.booleanValue];
+        return [k, null];
+    }));
 }
 
 async function signInGoogle() {
@@ -788,9 +852,9 @@ async function onAuthChange(user) {
 
 async function loadCloudData(user) {
     try {
-        const snap = await firebase.firestore().collection('users').doc(user.uid).get();
-        if (!snap.exists) return;
-        const d = snap.data();
+        const doc = await fsGet('users', user.uid);
+        if (!doc) return;
+        const d = fsFields(doc.fields);
         if ((d.bestScore || 0) > bestScore) {
             bestScore = d.bestScore;
             localStorage.setItem('chunta_ppang_best', bestScore);
@@ -812,10 +876,9 @@ async function loadCloudData(user) {
 
 function saveCloudData() {
     if (!firebaseReady || !currentUser) return;
-    firebase.firestore().collection('users').doc(currentUser.uid).set(
-        { bestScore, bgmVolume, sfxVolume,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
-        { merge: true }
+    fsPatch('users', currentUser.uid,
+        { bestScore: fsV(bestScore), bgmVolume: fsV(bgmVolume), sfxVolume: fsV(sfxVolume) },
+        ['bestScore', 'bgmVolume', 'sfxVolume']
     ).catch(e => console.warn('Cloud save:', e.message));
 }
 
@@ -907,8 +970,8 @@ async function checkNickname() {
     fb.textContent = '확인 중…'; fb.className = 'nick-checking';
     try {
         if (!currentUser) throw Object.assign(new Error('not-authenticated'), { code: 'unauthenticated' });
-        const snap = await firebase.firestore().collection('nicknames').doc(val).get();
-        if (snap.exists) {
+        const doc = await fsGet('nicknames', val);
+        if (doc !== null) {
             fb.textContent = '이미 사용 중인 닉네임입니다.'; fb.className = 'nick-error';
         } else {
             fb.textContent = '✓ 사용 가능한 닉네임입니다!'; fb.className = 'nick-ok';
@@ -918,11 +981,9 @@ async function checkNickname() {
         const code = e.code || 'unknown';
         console.error('[닉네임 중복확인 오류]', code, e.message, e);
         if (code === 'permission-denied') {
-            fb.innerHTML = 'Firestore 규칙 오류 — Firebase 콘솔에서 nicknames 규칙을 추가해주세요.';
+            fb.textContent = 'Firestore 규칙 오류 — Firebase 콘솔에서 nicknames 규칙을 확인해주세요.';
         } else if (code === 'unauthenticated') {
             fb.textContent = '로그인 상태가 아닙니다. 다시 로그인해주세요.';
-        } else if (code === 'unavailable') {
-            fb.textContent = '네트워크 오류입니다. 인터넷 연결을 확인해주세요.';
         } else {
             fb.textContent = `오류 코드: ${code}`;
         }
@@ -935,21 +996,16 @@ async function confirmNickname() {
     const btn = document.getElementById('nicknameConfirmBtn');
     btn.disabled = true; btn.textContent = '저장 중…';
     try {
-        const db = firebase.firestore();
-        const batch = db.batch();
         if (isChangingNickname && currentNickname) {
-            batch.delete(db.collection('nicknames').doc(currentNickname));
+            await fsDel('nicknames', currentNickname);
         }
-        batch.set(db.collection('nicknames').doc(checkedNickname),
-            { uid: currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-        batch.set(db.collection('users').doc(currentUser.uid),
-            { nickname: checkedNickname }, { merge: true });
-        await batch.commit();
+        await fsPatch('nicknames', checkedNickname, { uid: fsV(currentUser.uid) });
+        await fsPatch('users', currentUser.uid, { nickname: fsV(checkedNickname) }, ['nickname']);
         currentNickname = checkedNickname; checkedNickname = null;
         closeNicknameModal(); updateAuthUI();
     } catch(e) {
         btn.disabled = false; btn.textContent = '확인';
-        document.getElementById('nicknameFeedback').textContent = '저장 실패. 다시 시도해주세요.';
+        document.getElementById('nicknameFeedback').textContent = `저장 실패: ${e.code || e.message}`;
         document.getElementById('nicknameFeedback').className = 'nick-error';
         console.warn('Nick save:', e);
     }
@@ -971,15 +1027,17 @@ function getWeekStr() {
 
 async function submitLeaderboardScore(s) {
     if (!firebaseReady || !currentUser || !currentNickname) return;
-    const db = firebase.firestore(), uid = currentUser.uid;
+    const uid = currentUser.uid;
     const today = getTodayStr(), week = getWeekStr();
-    const ts = firebase.firestore.FieldValue.serverTimestamp();
 
     const trySet = async (col, docId, field, key) => {
-        const ref = db.collection(col).doc(docId);
-        const snap = await ref.get();
-        if (!snap.exists || snap.data().score < s) {
-            await ref.set({ uid, nickname: currentNickname, score: s, [field]: key, updatedAt: ts });
+        const existing = await fsGet(col, docId);
+        const prev = existing ? (fsFields(existing.fields).score || 0) : 0;
+        if (prev < s) {
+            await fsPatch(col, docId, {
+                uid: fsV(uid), nickname: fsV(currentNickname),
+                score: fsV(s), [field]: fsV(key),
+            });
         }
     };
     await Promise.all([
@@ -1025,17 +1083,14 @@ async function loadRanking(tab) {
         const col   = tab === 'daily' ? 'daily_best' : 'weekly_best';
         const field = tab === 'daily' ? 'date' : 'week';
         const key   = tab === 'daily' ? getTodayStr() : getWeekStr();
-        const snap  = await firebase.firestore().collection(col).where(field, '==', key).limit(100).get();
+        const rows  = await fsQuery(col, field, key);
 
-        if (snap.empty) {
+        if (rows.length === 0) {
             list.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:160px;color:rgba(255,255,255,0.3);font-size:13px;">아직 기록이 없습니다</div>';
             return;
         }
 
-        const docs = snap.docs
-            .map(d => d.data())
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 20);
+        const docs = rows.sort((a, b) => b.score - a.score).slice(0, 20);
 
         const myUid = currentUser.uid;
         const medals = ['🥇','🥈','🥉'];
