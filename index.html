@@ -161,6 +161,12 @@
             animation: barFlash 0.45s ease-in-out infinite alternate;
         }
         @keyframes barFlash { from { opacity:0.82; } to { opacity:1; } }
+        @keyframes screenFlash { from { opacity:0.35; } to { opacity:0; } }
+        @keyframes chainPop {
+            0%   { transform: scale(0.6); opacity:0; }
+            60%  { transform: scale(1.15); }
+            100% { transform: scale(1);   opacity:1; }
+        }
 
         /* ── Chain / Time bonus messages ── */
         #chainDisplay {
@@ -311,8 +317,9 @@
             100% { opacity:0; transform:translate(-50%,-84px) scale(1); }
         }
 
-        /* ── Ranking / Nickname modal: loadingOverlay(9999)보다 높아야 시작화면에서 보임 ── */
-        #rankingModal, #nicknameModal { z-index: 10000; }
+        /* ── 이 모달들은 loadingOverlay(9999)보다 높아야 시작화면에서 보임 ── */
+        #rankingModal, #settingsModal { z-index: 10000; }
+        #nicknameModal { z-index: 10001; } /* 설정 모달 위에 떠야 함 */
 
         /* ── Countdown overlay ── */
         #countdownOverlay {
@@ -440,16 +447,8 @@
 
 <!-- ══════════ Loading / Start ══════════ -->
 <div id="loadingOverlay">
-    <!-- 우상단 설정 버튼 (시작화면에서만 표시) -->
-    <button id="menuSettingsBtn" onclick="openSettings()"
-            style="position:absolute;top:14px;right:14px;
-                   background:rgba(255,255,255,0.07);border:1px solid rgba(172,254,248,0.18);
-                   border-radius:10px;padding:8px 13px;font-size:18px;cursor:pointer;
-                   color:white;line-height:1;display:none;transition:background 0.18s;"
-            onmouseover="this.style.background='rgba(172,254,248,0.14)'"
-            onmouseout="this.style.background='rgba(255,255,255,0.07)'">⚙️</button>
 
-    <div id="loadingContent" style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+<div id="loadingContent" style="display:flex;flex-direction:column;align-items:center;gap:16px;">
         <div class="spinner"></div>
         <p style="color:rgba(255,255,255,0.55);font-size:17px;font-weight:700;letter-spacing:0.1em;">
             로딩 중… <span id="loadProgress" style="color:white;">0/12</span>
@@ -478,23 +477,31 @@
 
         <!-- ── Auth area ── -->
         <div id="startLoggedOut" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-            <button class="google-btn" onclick="signInGoogle()">
-                <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                    <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6A7.8 7.8 0 0 0 17 9c0-.57-.05-1.1-.15-1.59z"/>
-                    <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/>
-                    <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/>
-                    <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/>
-                </svg>
-                Google로 로그인
-            </button>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button class="google-btn" onclick="signInGoogle()">
+                    <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+                        <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6A7.8 7.8 0 0 0 17 9c0-.57-.05-1.1-.15-1.59z"/>
+                        <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/>
+                        <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/>
+                        <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/>
+                    </svg>
+                    Google 로그인
+                </button>
+                <button class="suika-btn" onclick="openSettings()"
+                        style="padding:9px 13px;font-size:18px;line-height:1;flex-shrink:0;">⚙️</button>
+            </div>
             <p style="font-size:10px;color:rgba(255,255,255,0.28);text-align:center;line-height:1.4;">
                 로그인하면 최고점수가 기기 간 동기화됩니다
             </p>
         </div>
         <div id="startLoggedIn" style="display:none;flex-direction:column;align-items:center;gap:8px;">
-            <div class="user-chip">
-                <img id="userAvatar" width="28" height="28" src="">
-                <span id="userName"></span>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <div class="user-chip">
+                    <img id="userAvatar" width="28" height="28" src="">
+                    <span id="userName"></span>
+                </div>
+                <button class="suika-btn" onclick="openSettings()"
+                        style="padding:8px 12px;font-size:18px;line-height:1;flex-shrink:0;">⚙️</button>
             </div>
             <button class="suika-btn" onclick="signOutGoogle()"
                     style="font-size:11px;padding:5px 16px;">로그아웃</button>
@@ -1123,8 +1130,12 @@ async function loadRanking(tab) {
             </div>`;
         }).join('');
     } catch(e) {
-        list.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px;">불러오기 실패<br><span style="color:rgba(255,255,255,0.3);font-size:10px;">콘솔에서 Firestore 인덱스 링크를 확인하세요</span></div>`;
-        console.warn('Ranking:', e);
+        console.warn('Ranking:', e.code, e.message);
+        const isPermErr = e.code === 'permission-denied' || e.code === 'http-403';
+        const hint = isPermErr
+            ? 'Firebase 콘솔 → Firestore Database → 규칙 탭에서<br>아래 두 줄을 수정 후 <b style="color:#fbbf24">게시</b>해주세요:<br><span style="font-size:10px;color:rgba(255,255,255,0.5);font-family:monospace">allow read: <b style="color:#4ade80">if true</b>;</span>'
+            : `오류: ${e.code || e.message}`;
+        list.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px;line-height:1.7;">${hint}</div>`;
     }
 }
 
@@ -1301,7 +1312,6 @@ function onReady() {
     document.getElementById('loadingContent').style.display = 'none';
     buildChibiGrid();
     document.getElementById('startContent').style.display = 'flex';
-    document.getElementById('menuSettingsBtn').style.display = 'block';
 }
 
 /* 시작화면 6×2 그리드 */
@@ -1569,7 +1579,7 @@ function startTimer() {
     updateTimerUI();
 
     timerInterval = setInterval(() => {
-        if (gamePaused) return;
+        if (gamePaused || isBusy) return;
         timeLeft--;
         updateTimerUI();
         if (timeLeft <= 10 && timeLeft > 0) sfx('tick');
@@ -1863,14 +1873,56 @@ function spawnPopup(x, y, text, cls) {
 }
 
 let chainTimer = null;
-const CHAIN_MSGS = ['','NICE!','GREAT!','EXCELLENT!','AMAZING!','INCREDIBLE!'];
+let boardGlowTimer = null;
+const CHAIN_MSGS  = ['','NICE!','GREAT!','EXCELLENT!','AMAZING!','INCREDIBLE!'];
+const CHAIN_COLORS = ['','#acfef8','#fbbf24','#f97316','#ef4444','#ec4899'];
+
 function showChain(chain, n) {
-    const el  = document.getElementById('chainDisplay');
-    const msg = chain < CHAIN_MSGS.length ? CHAIN_MSGS[chain] : '🎉 천타버스 FEVER!!';
+    const el    = document.getElementById('chainDisplay');
+    const msg   = chain < CHAIN_MSGS.length  ? CHAIN_MSGS[chain]  : '🎉 FEVER!!';
+    const color = chain < CHAIN_COLORS.length ? CHAIN_COLORS[chain]: '#ec4899';
+    const size  = Math.min(17 + chain * 2.5, 30);
+
     el.textContent = `${msg}  ${chain}콤보`;
-    el.style.opacity = '1';
+    el.style.color      = color;
+    el.style.fontSize   = size + 'px';
+    el.style.textShadow = `0 0 18px ${color}, 0 0 36px ${color}90`;
+    el.style.opacity    = '1';
+    el.style.animation  = 'none';
+    void el.offsetWidth;
+    el.style.animation  = 'chainPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both';
+
+    // 보드 글로우 (2콤보 이상)
+    if (chain >= 2) {
+        const bw = document.getElementById('boardWrapper');
+        bw.style.borderColor = color;
+        bw.style.boxShadow   =
+            `0 0 32px rgba(0,0,0,0.6), inset 0 0 20px rgba(0,0,0,0.3),`+
+            `0 0 ${24 + chain * 14}px ${color}70`;
+        clearTimeout(boardGlowTimer);
+        boardGlowTimer = setTimeout(() => {
+            bw.style.borderColor = '';
+            bw.style.boxShadow   = '';
+        }, 1400);
+    }
+
+    // 스크린 플래시 (3콤보 이상)
+    if (chain >= 3) {
+        const fl = document.createElement('div');
+        fl.style.cssText =
+            `position:fixed;inset:0;pointer-events:none;z-index:350;`+
+            `background:${color};animation:screenFlash 0.35s ease-out forwards;`;
+        document.body.appendChild(fl);
+        fl.addEventListener('animationend', () => fl.remove());
+    }
+
     clearTimeout(chainTimer);
-    chainTimer = setTimeout(() => { el.style.opacity = '0'; }, 1700);
+    chainTimer = setTimeout(() => {
+        el.style.opacity    = '0';
+        el.style.fontSize   = '17px';
+        el.style.color      = 'var(--theme-mint)';
+        el.style.textShadow = '0 0 12px rgba(172,254,248,0.7)';
+    }, 1700);
 }
 
 /* ═══════════════════════════════════════════
@@ -1907,7 +1959,6 @@ async function initAndStart() {
     document.getElementById('gameOverModal').classList.remove('active');
     document.getElementById('restartModal').classList.remove('active');
     document.getElementById('loadingOverlay').style.display  = 'none';
-    document.getElementById('menuSettingsBtn').style.display = 'none';
     document.getElementById('gameWrapper').classList.add('active');
     document.getElementById('chainDisplay').textContent = '';
     document.getElementById('chainDisplay').style.opacity = '1';
@@ -1943,7 +1994,6 @@ function goToMenu() {
     lo.style.display = 'flex';
     document.getElementById('loadingContent').style.display = 'none';
     document.getElementById('startContent').style.display   = 'flex';
-    document.getElementById('menuSettingsBtn').style.display = 'block';
     // 로그인 되어 있는데 닉네임 미설정이면 메뉴 복귀 시 모달 표시
     if (currentUser && !currentNickname) openNicknameModal(false);
 }
