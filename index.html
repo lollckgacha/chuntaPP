@@ -311,6 +311,9 @@
             100% { opacity:0; transform:translate(-50%,-84px) scale(1); }
         }
 
+        /* ── Ranking / Nickname modal: loadingOverlay(9999)보다 높아야 시작화면에서 보임 ── */
+        #rankingModal, #nicknameModal { z-index: 10000; }
+
         /* ── Countdown overlay ── */
         #countdownOverlay {
             position: fixed; inset: 0; z-index: 400;
@@ -755,7 +758,11 @@ async function onAuthChange(user) {
     currentUser = user;
     if (user) {
         await loadCloudData(user);
-        if (!currentNickname) openNicknameModal(false);
+        // 게임 중(loadingOverlay 숨김)에는 모달 표시 안 함 — goToMenu()에서 처리
+        if (!currentNickname) {
+            const onMenu = document.getElementById('loadingOverlay').style.display !== 'none';
+            if (onMenu) openNicknameModal(false);
+        }
     } else {
         currentNickname = null;
     }
@@ -1835,6 +1842,8 @@ function goToMenu() {
     lo.style.display = 'flex';
     document.getElementById('loadingContent').style.display = 'none';
     document.getElementById('startContent').style.display   = 'flex';
+    // 로그인 되어 있는데 닉네임 미설정이면 메뉴 복귀 시 모달 표시
+    if (currentUser && !currentNickname) openNicknameModal(false);
 }
 
 function openRestartModal()  { gamePaused=true; document.getElementById('restartModal').classList.add('active'); }
