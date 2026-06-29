@@ -7,6 +7,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=Jua&display=swap" rel="stylesheet">
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <style>
         :root {
             --theme-mint: #acfef8;
@@ -191,7 +195,7 @@
             height: var(--tile-size, 60px);
             border-radius: 14px;
             border: 3px solid;
-            cursor: pointer;
+            cursor: grab;
             position: relative;
             overflow: hidden;
             background: var(--member-color, #888);
@@ -207,6 +211,7 @@
             pointer-events: none;
         }
 
+        .tile:active { cursor: grabbing; }
         .tile:hover { transform: scale(1.07); box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
         .tile.selected {
             transform: scale(1.13) !important;
@@ -306,6 +311,30 @@
             100% { opacity:0; transform:translate(-50%,-84px) scale(1); }
         }
 
+        /* ── Google auth button ── */
+        .google-btn {
+            display: flex; align-items: center; justify-content: center; gap: 9px;
+            background: white; color: #1f1f1f;
+            border: none; border-radius: 8px;
+            padding: 9px 20px; font-size: 13px; font-weight: 700;
+            cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+            transition: box-shadow 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+        .google-btn:hover  { box-shadow: 0 4px 20px rgba(0,0,0,0.45); transform: translateY(-1px); }
+        .google-btn:active { transform: translateY(0); }
+
+        /* ── User chip ── */
+        .user-chip {
+            display: flex; align-items: center; gap: 9px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(172,254,248,0.25);
+            border-radius: 40px; padding: 5px 14px 5px 7px;
+        }
+        .user-chip img { border-radius: 50%; border: 2px solid var(--theme-mint); }
+        .user-chip span { font-size: 13px; font-weight: 700; color: var(--theme-mint); }
+
         /* ── Board reroll flash ── */
         #boardWrapper.rerolling {
             animation: rerollFlash 0.7s ease;
@@ -366,9 +395,33 @@
         <div id="chibiStrip" class="chibi-grid-6" style="margin-bottom:22px;"></div>
 
         <button class="suika-btn suika-btn-primary"
-                style="font-size:1.15rem;padding:14px 48px;margin-bottom:10px;
+                style="font-size:1.15rem;padding:14px 48px;margin-bottom:14px;
                        box-shadow:0 0 24px rgba(172,254,248,0.4);"
                 onclick="initAndStart()">게임 시작</button>
+
+        <!-- ── Auth area ── -->
+        <div id="startLoggedOut" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <button class="google-btn" onclick="signInGoogle()">
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+                    <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6A7.8 7.8 0 0 0 17 9c0-.57-.05-1.1-.15-1.59z"/>
+                    <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/>
+                    <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/>
+                    <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/>
+                </svg>
+                Google로 로그인
+            </button>
+            <p style="font-size:10px;color:rgba(255,255,255,0.28);text-align:center;line-height:1.4;">
+                로그인하면 최고점수가 기기 간 동기화됩니다
+            </p>
+        </div>
+        <div id="startLoggedIn" style="display:none;flex-direction:column;align-items:center;gap:8px;">
+            <div class="user-chip">
+                <img id="userAvatar" width="28" height="28" src="">
+                <span id="userName"></span>
+            </div>
+            <button class="suika-btn" onclick="signOutGoogle()"
+                    style="font-size:11px;padding:5px 16px;">로그아웃</button>
+        </div>
     </div>
 </div>
 
@@ -455,6 +508,38 @@
 
         <button class="suika-btn suika-btn-primary"
                 style="width:100%;padding:12px;font-size:1rem;" onclick="closeSettings()">닫기</button>
+
+        <!-- Auth section -->
+        <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:18px;padding-top:16px;">
+            <div id="settingsLoggedOut">
+                <button class="google-btn" onclick="signInGoogle()" style="width:100%;">
+                    <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
+                        <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6A7.8 7.8 0 0 0 17 9c0-.57-.05-1.1-.15-1.59z"/>
+                        <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/>
+                        <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/>
+                        <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/>
+                    </svg>
+                    Google로 로그인
+                </button>
+                <p style="font-size:10px;color:rgba(255,255,255,0.25);margin-top:7px;text-align:center;">
+                    점수·설정이 기기 간 동기화됩니다
+                </p>
+            </div>
+            <div id="settingsLoggedIn" style="display:none;">
+                <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:10px;">
+                    <img id="settingsUserAvatar" width="22" height="22"
+                         style="border-radius:50%;border:1px solid var(--theme-mint);" src="">
+                    <span id="settingsUserName"
+                          style="font-size:12px;color:rgba(255,255,255,0.65);max-width:140px;
+                                 overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                    <span style="font-size:10px;background:rgba(172,254,248,0.12);
+                                 color:var(--theme-mint);border-radius:20px;
+                                 padding:2px 8px;font-weight:700;flex-shrink:0;">동기화 중</span>
+                </div>
+                <button class="suika-btn" onclick="signOutGoogle()"
+                        style="width:100%;padding:8px;font-size:12px;">로그아웃</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -471,6 +556,136 @@
 </div>
 
 <script>
+/* ═══════════════════════════════════════════
+   FIREBASE CONFIG
+   console.firebase.google.com 에서 프로젝트를 만들고
+   아래 값을 채워주세요.
+
+   설정 방법:
+   1. Firebase 콘솔 → 프로젝트 만들기
+   2. Authentication → Google 로그인 사용 설정
+   3. Firestore Database 만들기 (테스트 모드로 시작)
+   4. Firestore 보안 규칙 설정 (아래 주석 참고)
+   5. Authentication → 승인된 도메인에 localhost 추가
+
+   Firestore 보안 규칙:
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /users/{uid} {
+         allow read, write: if request.auth != null && request.auth.uid == uid;
+       }
+     }
+   }
+═══════════════════════════════════════════ */
+const firebaseConfig = {
+    apiKey: "AIzaSyCkRMIw1AcnI9w9agNhTCwgS1xgA8FNUG0",
+  authDomain: "chunta-d80c5.firebaseapp.com",
+  projectId: "chunta-d80c5",
+  storageBucket: "chunta-d80c5.firebasestorage.app",
+  messagingSenderId: "806899242677",
+  appId: "1:806899242677:web:73ba1280459de4083390fc"
+};
+
+let firebaseReady = false;
+let currentUser   = null;
+
+function initFirebase() {
+    try {
+        if (firebaseConfig.apiKey === 'YOUR_API_KEY') return;
+        firebase.initializeApp(firebaseConfig);
+        firebase.auth().onAuthStateChanged(onAuthChange);
+        firebaseReady = true;
+    } catch(e) { console.warn('Firebase init:', e.message); }
+}
+
+async function signInGoogle() {
+    if (!firebaseReady) {
+        alert('Google 로그인을 사용하려면\nindex.html의 firebaseConfig를 먼저 설정해주세요.');
+        return;
+    }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+        await firebase.auth().signInWithPopup(provider);
+    } catch(e) {
+        if (e.code === 'auth/popup-blocked') {
+            firebase.auth().signInWithRedirect(provider);
+        } else { console.warn('Sign in:', e.code); }
+    }
+}
+
+async function signOutGoogle() {
+    if (firebaseReady) await firebase.auth().signOut();
+}
+
+async function onAuthChange(user) {
+    currentUser = user;
+    if (user) await loadCloudData(user);
+    updateAuthUI();
+}
+
+async function loadCloudData(user) {
+    try {
+        const snap = await firebase.firestore().collection('users').doc(user.uid).get();
+        if (!snap.exists) return;
+        const d = snap.data();
+        if ((d.bestScore || 0) > bestScore) {
+            bestScore = d.bestScore;
+            localStorage.setItem('chunta_ppang_best', bestScore);
+            updateScoreUI();
+        }
+        if (d.bgmVolume !== undefined) {
+            bgmVolume = d.bgmVolume;
+            if (bgm) bgm.volume = bgmVolume;
+            localStorage.setItem('chunta_bgm_vol', bgmVolume);
+        }
+        if (d.sfxVolume !== undefined) {
+            sfxVolume = d.sfxVolume;
+            if (sfxMaster) sfxMaster.gain.setValueAtTime(sfxVolume, sfxMaster.context.currentTime);
+            localStorage.setItem('chunta_sfx_vol', sfxVolume);
+        }
+    } catch(e) { console.warn('Cloud load:', e.message); }
+}
+
+function saveCloudData() {
+    if (!firebaseReady || !currentUser) return;
+    firebase.firestore().collection('users').doc(currentUser.uid).set(
+        { bestScore, bgmVolume, sfxVolume,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
+        { merge: true }
+    ).catch(e => console.warn('Cloud save:', e.message));
+}
+
+function updateAuthUI() {
+    const li  = !!currentUser;
+    const ava = currentUser?.photoURL   || '';
+    const nm  = currentUser?.displayName || currentUser?.email || '';
+
+    // 시작화면
+    const slo = document.getElementById('startLoggedOut');
+    const sli = document.getElementById('startLoggedIn');
+    if (slo) slo.style.display = li ? 'none' : 'flex';
+    if (sli) sli.style.display = li ? 'flex' : 'none';
+    if (li) {
+        const av = document.getElementById('userAvatar');
+        const un = document.getElementById('userName');
+        if (av) av.src = ava;
+        if (un) un.textContent = nm;
+    }
+
+    // 설정 모달
+    const stlo = document.getElementById('settingsLoggedOut');
+    const stli = document.getElementById('settingsLoggedIn');
+    if (stlo) stlo.style.display = li ? 'none' : 'block';
+    if (stli) stli.style.display = li ? 'block' : 'none';
+    if (li) {
+        const sav = document.getElementById('settingsUserAvatar');
+        const sun = document.getElementById('settingsUserName');
+        if (sav) sav.src = ava;
+        if (sun) sun.textContent = nm;
+    }
+}
+
 /* ═══════════════════════════════════════════
    DATA
 ═══════════════════════════════════════════ */
@@ -515,8 +730,9 @@ let sfxMaster = null;
 let bgmVolume = parseFloat(localStorage.getItem('chunta_bgm_vol') ?? '0.42');
 let sfxVolume = parseFloat(localStorage.getItem('chunta_sfx_vol') ?? '0.7');
 
-// 터치 스와이프 추적
+// 터치/마우스 스와이프 추적
 let touchOrigin = null; // { x, y, r, c }
+let mouseOrigin = null; // { x, y, r, c }
 
 let loadedCount = 0;
 
@@ -1028,6 +1244,53 @@ function onTouchEndTile(e, r, c) {
     }
 }
 
+/* ── 마우스 드래그 핸들러 (PC) ── */
+function onMouseDownTile(e, r, c) {
+    if (e.button !== 0 || isBusy || timeLeft <= 0 || gamePaused) return;
+    e.preventDefault(); // 텍스트 선택·기본 드래그 방지
+    mouseOrigin = { x: e.clientX, y: e.clientY, r, c };
+    document.body.style.cursor = 'grabbing';
+    // 누른 타일 선택 시각 피드백
+    e.currentTarget.classList.add('selected');
+}
+
+function onMouseUpGlobal(e) {
+    if (!mouseOrigin || e.button !== 0) return;
+    document.body.style.cursor = '';
+
+    const dx  = e.clientX - mouseOrigin.x;
+    const dy  = e.clientY - mouseOrigin.y;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    const threshold = Math.max(tileSize * 0.22, 8);
+    const { r: sr, c: sc } = mouseOrigin;
+    mouseOrigin = null;
+
+    if (isBusy || timeLeft <= 0 || gamePaused) {
+        getTileEl(sr, sc)?.classList.remove('selected');
+        return;
+    }
+
+    if (Math.max(adx, ady) < threshold) {
+        // 짧은 클릭 → 기존 클릭 로직으로
+        getTileEl(sr, sc)?.classList.remove('selected');
+        onTileClick(sr, sc);
+        return;
+    }
+
+    // 드래그 → 방향 계산 후 스왑
+    let dr = 0, dc = 0;
+    if (adx > ady) dc = dx > 0 ? 1 : -1;
+    else            dr = dy > 0 ? 1 : -1;
+
+    const nr = sr + dr, nc = sc + dc;
+    selected = null;
+    renderBoard();
+
+    if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+        doSwap(sr, sc, nr, nc);
+    }
+}
+
 /* ═══════════════════════════════════════════
    RENDERING
 ═══════════════════════════════════════════ */
@@ -1076,8 +1339,8 @@ function renderBoard() {
             if (selected && selected.r===r && selected.c===c)
                 tile.classList.add('selected');
 
-            // PC: 클릭
-            tile.addEventListener('click', () => onTileClick(r, c));
+            // PC: 마우스 드래그 (mousedown → document mouseup)
+            tile.addEventListener('mousedown', e => onMouseDownTile(e, r, c));
             // 모바일: 스와이프
             tile.addEventListener('touchstart', e => onTouchStartTile(e, r, c), { passive:false });
             tile.addEventListener('touchend',   e => onTouchEndTile(e, r, c),   { passive:false });
@@ -1129,7 +1392,7 @@ function updateScoreUI() {
 
 function addScore(pts, hit) {
     score += pts;
-    if (score > bestScore) { bestScore = score; localStorage.setItem('chunta_ppang_best', bestScore); }
+    if (score > bestScore) { bestScore = score; localStorage.setItem('chunta_ppang_best', bestScore); saveCloudData(); }
     updateScoreUI();
     if (!hit) return;
     outer:
@@ -1235,6 +1498,7 @@ function onBGMSlider(val) {
     if (bgm) bgm.volume = bgmVolume;
     localStorage.setItem('chunta_bgm_vol', bgmVolume);
     document.getElementById('bgmVolLabel').textContent = val + '%';
+    saveCloudData();
 }
 
 function onSFXSlider(val) {
@@ -1243,6 +1507,7 @@ function onSFXSlider(val) {
     localStorage.setItem('chunta_sfx_vol', sfxVolume);
     document.getElementById('sfxVolLabel').textContent = val + '%';
     sfx('select'); // 미리듣기
+    saveCloudData();
 }
 
 /* ═══════════════════════════════════════════
@@ -1257,7 +1522,8 @@ window.addEventListener('resize', () => {
     }
 });
 
-window.addEventListener('load', preload);
+window.addEventListener('load', () => { initFirebase(); preload(); });
+document.addEventListener('mouseup', onMouseUpGlobal);
 </script>
 </body>
 </html>
