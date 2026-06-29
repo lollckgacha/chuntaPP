@@ -730,6 +730,8 @@ function initFirebase() {
     try {
         if (firebaseConfig.apiKey === 'YOUR_API_KEY') return;
         firebase.initializeApp(firebaseConfig);
+        // WebSocket이 방화벽/백신에 막힐 경우 HTTP Long Polling으로 자동 전환
+        firebase.firestore().settings({ experimentalAutoDetectLongPolling: true, merge: true });
         firebase.auth().onAuthStateChanged(onAuthChange);
         // 리다이렉트 로그인 결과 처리
         firebase.auth().getRedirectResult().catch(e => {
