@@ -311,6 +311,67 @@
             100% { opacity:0; transform:translate(-50%,-84px) scale(1); }
         }
 
+        /* ── Countdown overlay ── */
+        #countdownOverlay {
+            position: fixed; inset: 0; z-index: 400;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Jua', sans-serif;
+            font-size: clamp(5rem, 22vw, 10rem); font-weight: 900;
+            color: var(--theme-mint);
+            text-shadow: 0 0 60px rgba(172,254,248,0.8), 0 4px 40px rgba(0,0,0,0.9);
+            pointer-events: none;
+            opacity: 0; transform: scale(0.4);
+        }
+        #countdownOverlay.pop {
+            opacity: 1; transform: scale(1);
+            transition: opacity 0.15s ease, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        #countdownOverlay.fade {
+            opacity: 0; transform: scale(1.4);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+
+        /* ── Ranking modal ── */
+        .rank-tab {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(172,254,248,0.2);
+            border-radius: 20px;
+            color: rgba(255,255,255,0.55);
+            font-size: 12px; font-weight: 700;
+            padding: 4px 16px; cursor: pointer;
+            font-family: 'Noto Sans KR', sans-serif;
+            transition: all 0.2s;
+        }
+        .rank-tab.active { background: var(--theme-mint); border-color: var(--theme-mint); color: var(--bg-dark); }
+        .rank-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 6px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .rank-item.rank-me { background: rgba(172,254,248,0.07); border-radius: 8px; }
+        .rank-num { font-size: 14px; font-weight: 900; color: rgba(255,255,255,0.3); width: 26px; text-align: center; flex-shrink: 0; }
+        .rank-num.gold { color: #fbbf24; }
+        .rank-name { flex: 1; font-size: 13px; font-weight: 700; color: white; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rank-score { font-size: 14px; font-weight: 900; color: var(--theme-mint); flex-shrink: 0; }
+        #rankingList { min-height: 180px; max-height: 300px; overflow-y: auto; }
+        #rankingList::-webkit-scrollbar { width: 4px; }
+        #rankingList::-webkit-scrollbar-thumb { background: rgba(172,254,248,0.2); border-radius: 2px; }
+
+        /* ── Nickname modal ── */
+        #nicknameInput {
+            width: 100%; background: rgba(255,255,255,0.07);
+            border: 2px solid rgba(172,254,248,0.2); border-radius: 8px;
+            color: white; font-size: 15px; font-weight: 700;
+            padding: 11px 14px; margin-bottom: 8px;
+            font-family: 'Noto Sans KR', sans-serif; outline: none;
+            transition: border-color 0.2s;
+        }
+        #nicknameInput:focus { border-color: rgba(172,254,248,0.6); }
+        .nick-ok       { color: #4ade80; font-size: 12px; font-weight: 700; }
+        .nick-error    { color: #ef4444; font-size: 12px; font-weight: 700; }
+        .nick-checking { color: rgba(255,255,255,0.4); font-size: 12px; }
+        button:disabled { opacity: 0.35; cursor: not-allowed; }
+
         /* ── Google auth button ── */
         .google-btn {
             display: flex; align-items: center; justify-content: center; gap: 9px;
@@ -372,6 +433,7 @@
 </head>
 <body>
 <div class="menu-bg"></div>
+<div id="countdownOverlay"></div>
 
 <!-- ══════════ Loading / Start ══════════ -->
 <div id="loadingOverlay">
@@ -395,9 +457,12 @@
         <div id="chibiStrip" class="chibi-grid-6" style="margin-bottom:22px;"></div>
 
         <button class="suika-btn suika-btn-primary"
-                style="font-size:1.15rem;padding:14px 48px;margin-bottom:14px;
+                style="font-size:1.15rem;padding:14px 48px;margin-bottom:10px;
                        box-shadow:0 0 24px rgba(172,254,248,0.4);"
                 onclick="initAndStart()">게임 시작</button>
+
+        <button class="suika-btn" onclick="openRanking()"
+                style="font-size:1rem;padding:10px 36px;margin-bottom:14px;">🏆 랭킹</button>
 
         <!-- ── Auth area ── -->
         <div id="startLoggedOut" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
@@ -459,7 +524,7 @@
     <div id="activeMembersRow"></div>
 
     <div style="display:flex;gap:10px;flex-shrink:0;">
-        <button class="suika-btn" onclick="openRestartModal()">🔄 다시하기</button>
+        <button class="suika-btn" onclick="goToMenu()">🏠 메인화면</button>
         <button class="suika-btn" onclick="openSettings()" style="padding:9px 16px;font-size:16px;">⚙️</button>
     </div>
 </div>
@@ -479,6 +544,48 @@
                     style="font-size:1.05rem;padding:12px;" onclick="initAndStart()">다시 하기</button>
             <button class="suika-btn"
                     style="font-size:0.95rem;padding:10px;" onclick="goToMenu()">메인 화면</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════ Ranking ══════════ -->
+<div id="rankingModal" class="modal-bd">
+    <div class="modal-card" style="max-width:340px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <h2 style="font-size:1.25rem;font-weight:900;color:white;">🏆 랭킹</h2>
+            <div style="display:flex;gap:6px;">
+                <button id="rankTabDaily"  class="rank-tab active" onclick="switchRankTab('daily')">일간</button>
+                <button id="rankTabWeekly" class="rank-tab"        onclick="switchRankTab('weekly')">주간</button>
+            </div>
+        </div>
+        <div id="rankingList"></div>
+        <button class="suika-btn suika-btn-primary"
+                style="width:100%;padding:11px;font-size:1rem;margin-top:14px;"
+                onclick="closeRanking()">닫기</button>
+    </div>
+</div>
+
+<!-- ══════════ Nickname Setup ══════════ -->
+<div id="nicknameModal" class="modal-bd">
+    <div class="modal-card" style="max-width:300px;">
+        <h2 id="nicknameModalTitle" style="font-size:1.3rem;font-weight:900;color:white;margin-bottom:6px;">닉네임 설정</h2>
+        <p style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:16px;line-height:1.5;">
+            2~12자 · 한글·영문·숫자·밑줄(_) 사용 가능
+        </p>
+        <input type="text" id="nicknameInput" maxlength="12" placeholder="닉네임 입력"
+               oninput="onNicknameInput()"
+               onkeydown="if(event.key==='Enter')checkNickname()">
+        <div id="nicknameFeedback" style="min-height:20px;margin-bottom:14px;"></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <button class="suika-btn" style="flex:1;padding:11px;font-size:13px;"
+                    onclick="checkNickname()">중복 확인</button>
+            <button id="nicknameConfirmBtn" class="suika-btn suika-btn-primary"
+                    style="flex:1;padding:11px;font-size:13px;" disabled
+                    onclick="confirmNickname()">확인</button>
+        </div>
+        <div id="nicknameSkipWrap" style="display:none;">
+            <button class="suika-btn" style="width:100%;padding:8px;font-size:12px;"
+                    onclick="closeNicknameModal()">취소</button>
         </div>
     </div>
 </div>
@@ -526,15 +633,26 @@
                 </p>
             </div>
             <div id="settingsLoggedIn" style="display:none;">
-                <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:12px;">
                     <img id="settingsUserAvatar" width="22" height="22"
                          style="border-radius:50%;border:1px solid var(--theme-mint);" src="">
                     <span id="settingsUserName"
-                          style="font-size:12px;color:rgba(255,255,255,0.65);max-width:140px;
+                          style="font-size:12px;color:rgba(255,255,255,0.55);max-width:120px;
                                  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                     <span style="font-size:10px;background:rgba(172,254,248,0.12);
                                  color:var(--theme-mint);border-radius:20px;
                                  padding:2px 8px;font-weight:700;flex-shrink:0;">동기화 중</span>
+                </div>
+                <!-- 닉네임 -->
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                            background:rgba(255,255,255,0.05);border-radius:8px;
+                            padding:8px 12px;margin-bottom:10px;">
+                    <span style="font-size:12px;color:rgba(255,255,255,0.5);">닉네임</span>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span id="settingsNickname" style="font-size:13px;font-weight:900;color:var(--theme-mint);"></span>
+                        <button class="suika-btn" onclick="openNicknameModal(true)"
+                                style="padding:3px 10px;font-size:11px;border-radius:6px;">변경</button>
+                    </div>
                 </div>
                 <button class="suika-btn" onclick="signOutGoogle()"
                         style="width:100%;padding:8px;font-size:12px;">로그아웃</button>
@@ -595,32 +713,52 @@ function initFirebase() {
         if (firebaseConfig.apiKey === 'YOUR_API_KEY') return;
         firebase.initializeApp(firebaseConfig);
         firebase.auth().onAuthStateChanged(onAuthChange);
+        // 리다이렉트 로그인 결과 처리
+        firebase.auth().getRedirectResult().catch(e => {
+            if (e.code === 'auth/unauthorized-domain') {
+                alert('Firebase 승인된 도메인에 이 주소를 추가해주세요.\nAuthentication → 승인된 도메인');
+            }
+        });
         firebaseReady = true;
     } catch(e) { console.warn('Firebase init:', e.message); }
 }
 
 async function signInGoogle() {
     if (!firebaseReady) {
-        alert('Google 로그인을 사용하려면\nindex.html의 firebaseConfig를 먼저 설정해주세요.');
+        alert('Google 로그인을 사용하려면\nfirebaseConfig를 먼저 설정해주세요.');
         return;
     }
     const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     try {
         await firebase.auth().signInWithPopup(provider);
     } catch(e) {
-        if (e.code === 'auth/popup-blocked') {
+        if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request') {
+            // 팝업 차단 시 리다이렉트로 대체
             firebase.auth().signInWithRedirect(provider);
-        } else { console.warn('Sign in:', e.code); }
+        } else if (e.code === 'auth/unauthorized-domain') {
+            alert('Firebase 콘솔 → Authentication → 승인된 도메인에\n현재 주소(' + location.hostname + ')를 추가해주세요.');
+        } else if (e.code !== 'auth/popup-closed-by-user') {
+            console.warn('Sign in:', e.code, e.message);
+        }
     }
 }
 
 async function signOutGoogle() {
-    if (firebaseReady) await firebase.auth().signOut();
+    if (firebaseReady) {
+        currentNickname = null;
+        await firebase.auth().signOut();
+    }
 }
 
 async function onAuthChange(user) {
     currentUser = user;
-    if (user) await loadCloudData(user);
+    if (user) {
+        await loadCloudData(user);
+        if (!currentNickname) openNicknameModal(false);
+    } else {
+        currentNickname = null;
+    }
     updateAuthUI();
 }
 
@@ -644,6 +782,7 @@ async function loadCloudData(user) {
             if (sfxMaster) sfxMaster.gain.setValueAtTime(sfxVolume, sfxMaster.context.currentTime);
             localStorage.setItem('chunta_sfx_vol', sfxVolume);
         }
+        if (d.nickname) currentNickname = d.nickname;
     } catch(e) { console.warn('Cloud load:', e.message); }
 }
 
@@ -658,8 +797,9 @@ function saveCloudData() {
 
 function updateAuthUI() {
     const li  = !!currentUser;
-    const ava = currentUser?.photoURL   || '';
+    const ava = currentUser?.photoURL || '';
     const nm  = currentUser?.displayName || currentUser?.email || '';
+    const nick = currentNickname || nm;
 
     // 시작화면
     const slo = document.getElementById('startLoggedOut');
@@ -670,7 +810,7 @@ function updateAuthUI() {
         const av = document.getElementById('userAvatar');
         const un = document.getElementById('userName');
         if (av) av.src = ava;
-        if (un) un.textContent = nm;
+        if (un) un.textContent = nick;
     }
 
     // 설정 모달
@@ -681,8 +821,204 @@ function updateAuthUI() {
     if (li) {
         const sav = document.getElementById('settingsUserAvatar');
         const sun = document.getElementById('settingsUserName');
+        const snn = document.getElementById('settingsNickname');
         if (sav) sav.src = ava;
         if (sun) sun.textContent = nm;
+        if (snn) snn.textContent = currentNickname || '(미설정)';
+    }
+}
+
+/* ═══════════════════════════════════════════
+   NICKNAME
+═══════════════════════════════════════════ */
+let currentNickname    = null;
+let checkedNickname    = null;
+let isChangingNickname = false;
+
+function openNicknameModal(isChange = false) {
+    isChangingNickname = isChange;
+    checkedNickname = null;
+    document.getElementById('nicknameInput').value = '';
+    document.getElementById('nicknameFeedback').textContent = '';
+    document.getElementById('nicknameFeedback').className = '';
+    document.getElementById('nicknameConfirmBtn').disabled = true;
+    document.getElementById('nicknameConfirmBtn').textContent = '확인';
+    document.getElementById('nicknameModalTitle').textContent = isChange ? '닉네임 변경' : '닉네임 설정';
+    document.getElementById('nicknameSkipWrap').style.display = isChange ? 'block' : 'none';
+    document.getElementById('nicknameModal').classList.add('active');
+    gamePaused = true;
+    setTimeout(() => document.getElementById('nicknameInput').focus(), 150);
+}
+
+function closeNicknameModal() {
+    document.getElementById('nicknameModal').classList.remove('active');
+    const anyOther = document.querySelector('.modal-bd.active:not(#nicknameModal)');
+    if (!anyOther) gamePaused = false;
+}
+
+function onNicknameInput() {
+    checkedNickname = null;
+    document.getElementById('nicknameConfirmBtn').disabled = true;
+    const fb = document.getElementById('nicknameFeedback');
+    fb.textContent = ''; fb.className = '';
+}
+
+async function checkNickname() {
+    if (!firebaseReady) return;
+    const val = document.getElementById('nicknameInput').value.trim();
+    const fb  = document.getElementById('nicknameFeedback');
+    const btn = document.getElementById('nicknameConfirmBtn');
+    checkedNickname = null; btn.disabled = true;
+
+    if (val.length < 2 || val.length > 12) {
+        fb.textContent = '닉네임은 2~12자 이내로 입력해주세요.'; fb.className = 'nick-error'; return;
+    }
+    if (!/^[가-힣a-zA-Z0-9_]+$/.test(val)) {
+        fb.textContent = '한글, 영문, 숫자, 밑줄(_)만 사용할 수 있습니다.'; fb.className = 'nick-error'; return;
+    }
+    if (isChangingNickname && val === currentNickname) {
+        fb.textContent = '현재 닉네임과 동일합니다.'; fb.className = 'nick-error'; return;
+    }
+
+    fb.textContent = '확인 중…'; fb.className = 'nick-checking';
+    try {
+        const snap = await firebase.firestore().collection('nicknames').doc(val).get();
+        if (snap.exists) {
+            fb.textContent = '이미 사용 중인 닉네임입니다.'; fb.className = 'nick-error';
+        } else {
+            fb.textContent = '✓ 사용 가능한 닉네임입니다!'; fb.className = 'nick-ok';
+            checkedNickname = val; btn.disabled = false;
+        }
+    } catch(e) {
+        fb.textContent = '오류가 발생했습니다. 다시 시도해주세요.'; fb.className = 'nick-error';
+        console.warn('Nick check:', e);
+    }
+}
+
+async function confirmNickname() {
+    if (!checkedNickname || !currentUser || !firebaseReady) return;
+    const btn = document.getElementById('nicknameConfirmBtn');
+    btn.disabled = true; btn.textContent = '저장 중…';
+    try {
+        const db = firebase.firestore();
+        const batch = db.batch();
+        if (isChangingNickname && currentNickname) {
+            batch.delete(db.collection('nicknames').doc(currentNickname));
+        }
+        batch.set(db.collection('nicknames').doc(checkedNickname),
+            { uid: currentUser.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        batch.set(db.collection('users').doc(currentUser.uid),
+            { nickname: checkedNickname }, { merge: true });
+        await batch.commit();
+        currentNickname = checkedNickname; checkedNickname = null;
+        closeNicknameModal(); updateAuthUI();
+    } catch(e) {
+        btn.disabled = false; btn.textContent = '확인';
+        document.getElementById('nicknameFeedback').textContent = '저장 실패. 다시 시도해주세요.';
+        document.getElementById('nicknameFeedback').className = 'nick-error';
+        console.warn('Nick save:', e);
+    }
+}
+
+/* ═══════════════════════════════════════════
+   RANKING
+═══════════════════════════════════════════ */
+let currentRankTab = 'daily';
+
+function getTodayStr() {
+    return new Date().toISOString().split('T')[0];
+}
+function getWeekStr() {
+    const d = new Date(), jan1 = new Date(d.getFullYear(), 0, 1);
+    const wk = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+    return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;
+}
+
+async function submitLeaderboardScore(s) {
+    if (!firebaseReady || !currentUser || !currentNickname) return;
+    const db = firebase.firestore(), uid = currentUser.uid;
+    const today = getTodayStr(), week = getWeekStr();
+    const ts = firebase.firestore.FieldValue.serverTimestamp();
+
+    const trySet = async (col, docId, field, key) => {
+        const ref = db.collection(col).doc(docId);
+        const snap = await ref.get();
+        if (!snap.exists || snap.data().score < s) {
+            await ref.set({ uid, nickname: currentNickname, score: s, [field]: key, updatedAt: ts });
+        }
+    };
+    await Promise.all([
+        trySet('daily_best',  `${today}_${uid}`, 'date', today),
+        trySet('weekly_best', `${week}_${uid}`,  'week', week),
+    ]);
+}
+
+function openRanking() {
+    document.getElementById('rankingModal').classList.add('active');
+    gamePaused = true;
+    currentRankTab = 'daily';
+    document.getElementById('rankTabDaily').classList.add('active');
+    document.getElementById('rankTabWeekly').classList.remove('active');
+    loadRanking('daily');
+}
+
+function closeRanking() {
+    document.getElementById('rankingModal').classList.remove('active');
+    const anyOther = document.querySelector('.modal-bd.active:not(#rankingModal)');
+    if (!anyOther) gamePaused = false;
+}
+
+function switchRankTab(tab) {
+    currentRankTab = tab;
+    document.getElementById('rankTabDaily').classList.toggle('active', tab === 'daily');
+    document.getElementById('rankTabWeekly').classList.toggle('active', tab === 'weekly');
+    loadRanking(tab);
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function loadRanking(tab) {
+    const list = document.getElementById('rankingList');
+    list.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:160px;color:rgba(255,255,255,0.35);font-size:13px;">로딩 중…</div>';
+
+    if (!firebaseReady || !currentUser) {
+        list.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:160px;gap:12px;color:rgba(255,255,255,0.4);font-size:13px;text-align:center;">랭킹을 보려면<br>Google 로그인이 필요합니다</div>';
+        return;
+    }
+
+    try {
+        const col   = tab === 'daily' ? 'daily_best' : 'weekly_best';
+        const field = tab === 'daily' ? 'date' : 'week';
+        const key   = tab === 'daily' ? getTodayStr() : getWeekStr();
+        const snap  = await firebase.firestore().collection(col).where(field, '==', key).limit(100).get();
+
+        if (snap.empty) {
+            list.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:160px;color:rgba(255,255,255,0.3);font-size:13px;">아직 기록이 없습니다</div>';
+            return;
+        }
+
+        const docs = snap.docs
+            .map(d => d.data())
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 20);
+
+        const myUid = currentUser.uid;
+        const medals = ['🥇','🥈','🥉'];
+        list.innerHTML = docs.map((d, i) => {
+            const isMe = d.uid === myUid;
+            const numHtml = i < 3
+                ? `<span class="rank-num gold">${medals[i]}</span>`
+                : `<span class="rank-num">${i+1}</span>`;
+            const meTag = isMe ? ' <span style="font-size:10px;background:rgba(172,254,248,0.2);color:var(--theme-mint);border-radius:10px;padding:1px 6px;font-weight:700;">나</span>' : '';
+            return `<div class="rank-item${isMe?' rank-me':''}">
+                ${numHtml}
+                <span class="rank-name">${escHtml(d.nickname||'?')}${meTag}</span>
+                <span class="rank-score">${Number(d.score).toLocaleString()}</span>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        list.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px;">불러오기 실패<br><span style="color:rgba(255,255,255,0.3);font-size:10px;">콘솔에서 Firestore 인덱스 링크를 확인하세요</span></div>`;
+        console.warn('Ranking:', e);
     }
 }
 
@@ -1431,13 +1767,38 @@ function showChain(chain, n) {
 }
 
 /* ═══════════════════════════════════════════
+   COUNTDOWN
+═══════════════════════════════════════════ */
+async function runCountdown() {
+    const el = document.getElementById('countdownOverlay');
+    const steps = [
+        { txt: '3', color: 'var(--theme-mint)' },
+        { txt: '2', color: 'var(--theme-mint)' },
+        { txt: '1', color: '#fbbf24' },
+        { txt: 'GO!', color: '#4ade80' },
+    ];
+    for (const { txt, color } of steps) {
+        el.textContent = txt;
+        el.style.color = color;
+        el.style.textShadow = `0 0 60px ${color}, 0 4px 40px rgba(0,0,0,0.9)`;
+        el.className = '';
+        void el.offsetWidth;
+        el.classList.add('pop');
+        await wait(txt === 'GO!' ? 480 : 750);
+        el.classList.replace('pop', 'fade');
+        await wait(220);
+    }
+    el.className = '';
+}
+
+/* ═══════════════════════════════════════════
    LIFECYCLE
 ═══════════════════════════════════════════ */
-function initAndStart() {
-    score=0; selected=null; isBusy=false; gamePaused=false; touchOrigin=null;
+async function initAndStart() {
+    score=0; selected=null; isBusy=true; gamePaused=false; touchOrigin=null; mouseOrigin=null;
 
-    closeRestartModal();
     document.getElementById('gameOverModal').classList.remove('active');
+    document.getElementById('restartModal').classList.remove('active');
     document.getElementById('loadingOverlay').style.display  = 'none';
     document.getElementById('gameWrapper').classList.add('active');
     document.getElementById('chainDisplay').textContent = '';
@@ -1449,16 +1810,21 @@ function initAndStart() {
     renderBoard();
     buildActiveMembersRow();
     updateScoreUI();
-    startTimer();
     initBGM();
+
+    await runCountdown();
+
+    isBusy = false;
+    startTimer();
     sfx('start');
 }
 
-function showGameOver() {
+async function showGameOver() {
     stopTimer(); stopBGM();
     document.getElementById('finalScore').textContent = score;
     buildGameOverGrid();
     document.getElementById('gameOverModal').classList.add('active');
+    submitLeaderboardScore(score).catch(e => console.warn('Leaderboard:', e));
 }
 
 function goToMenu() {
