@@ -689,12 +689,27 @@
    4. Firestore 보안 규칙 설정 (아래 주석 참고)
    5. Authentication → 승인된 도메인에 localhost 추가
 
-   Firestore 보안 규칙:
+   Firestore 보안 규칙 (Firebase 콘솔 → Firestore Database → 규칙):
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
        match /users/{uid} {
          allow read, write: if request.auth != null && request.auth.uid == uid;
+       }
+       match /nicknames/{nickname} {
+         allow read: if request.auth != null;
+         allow write: if request.auth != null &&
+           (resource == null || resource.data.uid == request.auth.uid);
+       }
+       match /daily_best/{doc} {
+         allow read: if request.auth != null;
+         allow write: if request.auth != null &&
+           request.resource.data.uid == request.auth.uid;
+       }
+       match /weekly_best/{doc} {
+         allow read: if request.auth != null;
+         allow write: if request.auth != null &&
+           request.resource.data.uid == request.auth.uid;
        }
      }
    }
@@ -889,6 +904,7 @@ async function checkNickname() {
 
     fb.textContent = '확인 중…'; fb.className = 'nick-checking';
     try {
+        if (!currentUser) throw Object.assign(new Error('not-authenticated'), { code: 'unauthenticated' });
         const snap = await firebase.firestore().collection('nicknames').doc(val).get();
         if (snap.exists) {
             fb.textContent = '이미 사용 중인 닉네임입니다.'; fb.className = 'nick-error';
@@ -897,8 +913,18 @@ async function checkNickname() {
             checkedNickname = val; btn.disabled = false;
         }
     } catch(e) {
-        fb.textContent = '오류가 발생했습니다. 다시 시도해주세요.'; fb.className = 'nick-error';
-        console.warn('Nick check:', e);
+        const code = e.code || 'unknown';
+        console.error('[닉네임 중복확인 오류]', code, e.message, e);
+        if (code === 'permission-denied') {
+            fb.innerHTML = 'Firestore 규칙 오류 — Firebase 콘솔에서 nicknames 규칙을 추가해주세요.';
+        } else if (code === 'unauthenticated') {
+            fb.textContent = '로그인 상태가 아닙니다. 다시 로그인해주세요.';
+        } else if (code === 'unavailable') {
+            fb.textContent = '네트워크 오류입니다. 인터넷 연결을 확인해주세요.';
+        } else {
+            fb.textContent = `오류 코드: ${code}`;
+        }
+        fb.className = 'nick-error';
     }
 }
 
