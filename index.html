@@ -306,6 +306,15 @@
             100% { opacity:0; transform:translate(-50%,-84px) scale(1); }
         }
 
+        /* ── Board reroll flash ── */
+        #boardWrapper.rerolling {
+            animation: rerollFlash 0.7s ease;
+        }
+        @keyframes rerollFlash {
+            0%,100% { box-shadow: 0 0 32px rgba(0,0,0,0.6), inset 0 0 20px rgba(0,0,0,0.3); }
+            40%     { box-shadow: 0 0 80px rgba(172,254,248,0.55), inset 0 0 40px rgba(172,254,248,0.18); border-color: rgba(172,254,248,0.9); }
+        }
+
         /* ── Settings sliders ── */
         input[type=range] {
             -webkit-appearance: none; appearance: none;
@@ -746,12 +755,63 @@ function findMatches() {
 
 function hitCount(hit) { return hit.flat().filter(Boolean).length; }
 
+/* 유효한 이동이 하나라도 있는지 확인 */
+function hasValidMoves() {
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            // 오른쪽 스왑 시도
+            if (c + 1 < COLS) {
+                [board[r][c], board[r][c+1]] = [board[r][c+1], board[r][c]];
+                const { hit } = findMatches();
+                [board[r][c], board[r][c+1]] = [board[r][c+1], board[r][c]];
+                if (hitCount(hit) > 0) return true;
+            }
+            // 아래쪽 스왑 시도
+            if (r + 1 < ROWS) {
+                [board[r][c], board[r+1][c]] = [board[r+1][c], board[r][c]];
+                const { hit } = findMatches();
+                [board[r][c], board[r+1][c]] = [board[r+1][c], board[r][c]];
+                if (hitCount(hit) > 0) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* 유효한 이동 없을 때 판 리롤 */
+async function triggerReroll() {
+    isBusy = true;
+    gamePaused = true;
+
+    const chain = document.getElementById('chainDisplay');
+    chain.textContent = '🔀 셔플!';
+    chain.style.opacity = '1';
+    clearTimeout(chainTimer);
+
+    const bw = document.getElementById('boardWrapper');
+    bw.classList.add('rerolling');
+    await wait(700);
+    bw.classList.remove('rerolling');
+
+    // 유효한 이동이 있는 판이 될 때까지 재생성
+    let tries = 0;
+    do { initBoard(); tries++; } while (!hasValidMoves() && tries < 30);
+
+    renderBoard();
+    document.querySelectorAll('#board .tile').forEach(t => t.classList.add('falling'));
+
+    await wait(380);
+    chainTimer = setTimeout(() => { chain.style.opacity = '0'; }, 1200);
+    gamePaused = false;
+    isBusy = false;
+}
+
 /* 그룹별 시간 보너스 계산 */
 function calcTimeBonus(groups) {
     return groups.reduce((sum, len) => {
-        if (len >= 5) return sum + 2;
-        if (len === 4) return sum + 1;
-        if (len >= 3) return sum + 0.5;
+        if (len >= 5) return sum + 3;
+        if (len === 4) return sum + 2;
+        if (len >= 3) return sum + 1;
         return sum;
     }, 0);
 }
@@ -786,7 +846,11 @@ function dropTiles() {
 async function processBoard(chain) {
     const { hit, groups } = findMatches();
     const n = hitCount(hit);
-    if (n === 0) { isBusy = false; return; }
+    if (n === 0) {
+        if (!hasValidMoves()) await triggerReroll();
+        isBusy = false;
+        return;
+    }
 
     sfx('match', { count: n });
     if (chain >= 1) { sfx('combo', { chain }); showChain(chain, n); }
@@ -1118,7 +1182,7 @@ function initAndStart() {
 
     calcTileSize();
     selectActiveMembers();
-    initBoard();
+    do { initBoard(); } while (!hasValidMoves());
     renderBoard();
     buildActiveMembersRow();
     updateScoreUI();
