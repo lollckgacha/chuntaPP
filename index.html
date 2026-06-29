@@ -711,12 +711,12 @@
            (resource == null || resource.data.uid == request.auth.uid);
        }
        match /daily_best/{doc} {
-         allow read: if request.auth != null;
+         allow read: if true;
          allow write: if request.auth != null &&
            request.resource.data.uid == request.auth.uid;
        }
        match /weekly_best/{doc} {
-         allow read: if request.auth != null;
+         allow read: if true;
          allow write: if request.auth != null &&
            request.resource.data.uid == request.auth.uid;
        }
@@ -789,9 +789,11 @@ async function fsDel(col, id) {
     if (!r.ok && r.status !== 404) throw await fsMkErr(r);
 }
 async function fsQuery(col, field, val) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (currentUser) { try { headers.Authorization = `Bearer ${await fsToken()}`; } catch(e) {} }
     const r = await fetch(`${fsBase()}:runQuery`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${await fsToken()}`, 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ structuredQuery: {
             from: [{ collectionId: col }],
             where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: val } } },
@@ -1064,6 +1066,7 @@ async function submitLeaderboardScore(s) {
 }
 
 function openRanking() {
+    if (!firebaseReady) { alert('Firebase가 초기화되지 않았습니다.'); return; }
     document.getElementById('rankingModal').classList.add('active');
     gamePaused = true;
     currentRankTab = 'daily';
@@ -1091,10 +1094,6 @@ async function loadRanking(tab) {
     const list = document.getElementById('rankingList');
     list.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:160px;color:rgba(255,255,255,0.35);font-size:13px;">로딩 중…</div>';
 
-    if (!firebaseReady || !currentUser) {
-        list.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:160px;gap:12px;color:rgba(255,255,255,0.4);font-size:13px;text-align:center;">랭킹을 보려면<br>Google 로그인이 필요합니다</div>';
-        return;
-    }
 
     try {
         const col   = tab === 'daily' ? 'daily_best' : 'weekly_best';
