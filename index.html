@@ -1066,13 +1066,17 @@ async function confirmNickname() {
 ═══════════════════════════════════════════ */
 let currentRankTab = 'daily';
 
+function kstNow() {
+    return new Date(Date.now() + 9 * 60 * 60 * 1000);
+}
 function getTodayStr() {
-    return new Date().toISOString().split('T')[0];
+    return kstNow().toISOString().split('T')[0];
 }
 function getWeekStr() {
-    const d = new Date(), jan1 = new Date(d.getFullYear(), 0, 1);
-    const wk = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
-    return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;
+    const d = kstNow();
+    const jan1 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const wk = Math.ceil(((d - jan1) / 86400000 + jan1.getUTCDay() + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(wk).padStart(2,'0')}`;
 }
 
 async function submitLeaderboardScore(s) {
