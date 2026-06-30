@@ -606,6 +606,7 @@
             <div style="display:flex;gap:6px;">
                 <button id="rankTabDaily"  class="rank-tab active" onclick="switchRankTab('daily')">일간</button>
                 <button id="rankTabWeekly" class="rank-tab"        onclick="switchRankTab('weekly')">주간</button>
+                <button id="rankTabMember" class="rank-tab"        onclick="switchRankTab('member')">천타</button>
             </div>
         </div>
         <div id="rankingList"></div>
@@ -1129,8 +1130,9 @@ function closeRanking() {
 
 function switchRankTab(tab) {
     currentRankTab = tab;
-    document.getElementById('rankTabDaily').classList.toggle('active', tab === 'daily');
+    document.getElementById('rankTabDaily').classList.toggle('active',  tab === 'daily');
     document.getElementById('rankTabWeekly').classList.toggle('active', tab === 'weekly');
+    document.getElementById('rankTabMember').classList.toggle('active', tab === 'member');
     loadRanking(tab);
 }
 
@@ -1156,10 +1158,18 @@ async function loadRanking(tab) {
     pagination.innerHTML = '';
 
     try {
-        const col   = tab === 'daily' ? 'daily_best' : 'weekly_best';
-        const field = tab === 'daily' ? 'date' : 'week';
-        const key   = tab === 'daily' ? getTodayStr() : getWeekStr();
-        const rows  = await fsQuery(col, field, key);
+        let rows;
+        if (tab === 'member') {
+            const memberUids = new Set(Object.values(MEMBER_UIDS).filter(Boolean));
+            const myUid = currentUser?.uid;
+            const allRows = await fsQuery('weekly_best', 'week', getWeekStr());
+            rows = allRows.filter(r => memberUids.has(r.uid) || r.uid === myUid);
+        } else {
+            const col   = tab === 'daily' ? 'daily_best' : 'weekly_best';
+            const field = tab === 'daily' ? 'date' : 'week';
+            const key   = tab === 'daily' ? getTodayStr() : getWeekStr();
+            rows = await fsQuery(col, field, key);
+        }
 
         if (rows.length === 0) {
             rankAllData = [];
@@ -1193,16 +1203,26 @@ function renderRankPage() {
     const myUid = currentUser?.uid;
     const medals = ['🥇','🥈','🥉'];
 
+    const memberColorMap = Object.fromEntries(ALL_MEMBERS.map(m => [m.name, m.color]));
+    const uidColorMap = Object.fromEntries(
+        ALL_MEMBERS.filter(m => MEMBER_UIDS[m.name]).map(m => [MEMBER_UIDS[m.name], m.color])
+    );
+
     list.innerHTML = docs.map((d, i) => {
         const rank = start + i;
         const isMe = d.uid === myUid;
+        const memberColor = uidColorMap[d.uid] || null;
         const numHtml = rank < 3
             ? `<span class="rank-num gold">${medals[rank]}</span>`
             : `<span class="rank-num">${rank + 1}</span>`;
         const meTag = isMe ? ' <span style="font-size:10px;background:rgba(172,254,248,0.2);color:var(--theme-mint);border-radius:10px;padding:1px 6px;font-weight:700;">나</span>' : '';
-        return `<div class="rank-item${isMe?' rank-me':''}">
+        const rowStyle = memberColor
+            ? `style="background:${memberColor}18;border-left:3px solid ${memberColor};padding-left:9px;border-radius:8px;"`
+            : (isMe ? '' : '');
+        const nameStyle = memberColor ? `style="color:${memberColor};font-weight:900;"` : '';
+        return `<div class="rank-item${isMe?' rank-me':''}" ${rowStyle}>
             ${numHtml}
-            <span class="rank-name">${escHtml(d.nickname||'?')}${meTag}</span>
+            <span class="rank-name" ${nameStyle}>${escHtml(d.nickname||'?')}${meTag}</span>
             <span class="rank-score">${Number(d.score).toLocaleString()}</span>
         </div>`;
     }).join('');
@@ -1253,6 +1273,25 @@ const ALL_MEMBERS = [
     { name: '마다옴', file: '02.png', color: '#FFD84D' },
     { name: '플리',   file: '12.png', color: '#b8e1f5' },
 ];
+
+// ── 멤버 Firebase UID 등록 ──────────────────────────────
+// Firebase 콘솔 → Authentication에서 각 멤버의 UID 확인 후 입력
+// 입력된 UID는 랭킹에서 닉네임에 상관없이 퍼스널컬러로 강조됩니다
+const MEMBER_UIDS = {
+    '천양':   '',
+    '임하밍': '',
+    '캬앙':   '',
+    '김웰로': 'BkJHWbesbFPfOjxoZw893eHLFbg1',
+    '달타':   '',
+    '체비':   '',
+    '나나문': '',
+    '문모모': '',
+    '모카':   '',
+    '카푸':   '',
+    '마다옴': '',
+    '플리':   '',
+};
+// ────────────────────────────────────────────────────────
 
 const ROWS = 8, COLS = 8;
 const GAME_TIME_START = 60;
