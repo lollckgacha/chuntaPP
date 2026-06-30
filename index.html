@@ -370,8 +370,9 @@
         .rank-num.gold { color: #fbbf24; }
         .rank-name { flex: 1; font-size: 13px; font-weight: 700; color: white; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .rank-score { font-size: 14px; font-weight: 900; color: var(--theme-mint); flex-shrink: 0; }
-        #rankingList { flex: 1; min-height: 0; }
-        .rank-pagination { display:flex;justify-content:center;align-items:center;gap:4px;padding:10px 0 0;flex-shrink:0; }
+        #rankingList { overflow-y: auto; min-height: 0; }
+        #rankPagination { flex-shrink: 0; margin-top: 10px; }
+        .rank-pagination { display:flex;justify-content:center;align-items:center;gap:4px; }
         .rank-page-btn { min-width:28px;height:28px;padding:0 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s; }
         .rank-page-btn.active { background:var(--theme-mint);color:var(--bg-dark);border-color:var(--theme-mint); }
         .rank-nav-btn { min-width:28px;height:28px;padding:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);border-radius:6px;font-size:15px;cursor:pointer;transition:all 0.15s; }
@@ -1660,8 +1661,8 @@ async function triggerReroll() {
 function calcTimeBonus(groups) {
     return groups.reduce((sum, len) => {
         if (len >= 5) return sum + 2;
-        if (len === 4) return sum + 1.5;
-        if (len >= 3) return sum + 1;
+        if (len === 4) return sum + 1;
+        if (len >= 3) return sum + 0.5;
         return sum;
     }, 0);
 }
