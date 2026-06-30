@@ -1107,8 +1107,9 @@ async function submitLeaderboardScore(s) {
         }
     };
     await Promise.all([
-        trySet('daily_best',  `${today}_${uid}`, 'date', today),
-        trySet('weekly_best', `${week}_${uid}`,  'week', week),
+        trySet('daily_best',    `${today}_${uid}`, 'date', today),
+        trySet('weekly_best',   `${week}_${uid}`,  'week', week),
+        trySet('all_time_best', uid,               'uid',  uid),
     ]);
 }
 
@@ -1162,8 +1163,9 @@ async function loadRanking(tab) {
         if (tab === 'member') {
             const memberUids = new Set(Object.values(MEMBER_UIDS).filter(Boolean));
             const myUid = currentUser?.uid;
-            const allRows = await fsQuery('weekly_best', 'week', getWeekStr());
-            rows = allRows.filter(r => memberUids.has(r.uid) || r.uid === myUid);
+            const allUids = [...memberUids, ...(myUid && !memberUids.has(myUid) ? [myUid] : [])];
+            const docs = await Promise.all(allUids.map(u => fsGet('all_time_best', u)));
+            rows = docs.filter(Boolean).map(doc => fsFields(doc.fields));
         } else {
             const col   = tab === 'daily' ? 'daily_best' : 'weekly_best';
             const field = tab === 'daily' ? 'date' : 'week';
