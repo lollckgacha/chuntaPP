@@ -800,8 +800,9 @@ async function fsToken() {
     return currentUser.getIdToken();
 }
 async function fsGet(col, id) {
-    const r = await fetch(`${fsBase()}/${col}/${encodeURIComponent(id)}`,
-        { headers: { Authorization: `Bearer ${await fsToken()}` } });
+    const headers = {};
+    if (currentUser) { try { headers.Authorization = `Bearer ${await fsToken()}`; } catch(e) {} }
+    const r = await fetch(`${fsBase()}/${col}/${encodeURIComponent(id)}`, { headers });
     if (r.status === 404) {
         const b = await r.json().catch(() => ({}));
         const msg = b.error?.message || '';
@@ -1143,18 +1144,6 @@ async function loadRanking(tab) {
     const list = document.getElementById('rankingList');
     const pagination = document.getElementById('rankPagination');
 
-    if (!currentUser) {
-        rankAllData = [];
-        pagination.innerHTML = '';
-        list.innerHTML = `<div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:160px;gap:12px;">
-            <span style="font-size:28px;">🔒</span>
-            <span style="font-size:13px;color:rgba(255,255,255,0.55);text-align:center;line-height:1.7;">
-                랭킹은 Google 로그인 후<br>이용할 수 있습니다
-            </span>
-        </div>`;
-        return;
-    }
-
     list.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:160px;color:rgba(255,255,255,0.35);font-size:13px;">로딩 중…</div>';
     pagination.innerHTML = '';
 
@@ -1162,7 +1151,7 @@ async function loadRanking(tab) {
         let rows;
         if (tab === 'member') {
             const memberUids = new Set(Object.values(MEMBER_UIDS).filter(Boolean));
-            const myUid = currentUser?.uid;
+            const myUid = currentUser?.uid ?? null;
             const allUids = [...memberUids, ...(myUid && !memberUids.has(myUid) ? [myUid] : [])];
             const docs = await Promise.all(allUids.map(u => fsGet('all_time_best', u)));
             rows = docs.filter(Boolean).map(doc => fsFields(doc.fields));
@@ -1182,7 +1171,7 @@ async function loadRanking(tab) {
         rankAllData = rows.sort((a, b) => b.score - a.score);
 
         // 내 순위 페이지로 이동
-        const myIdx = rankAllData.findIndex(d => d.uid === currentUser.uid);
+        const myIdx = rankAllData.findIndex(d => d.uid === currentUser?.uid);
         rankCurrentPage = myIdx >= 0 ? Math.floor(myIdx / RANK_PAGE_SIZE) : 0;
 
         renderRankPage();
