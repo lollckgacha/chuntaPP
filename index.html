@@ -851,7 +851,6 @@ async function fsQuery(col, field, val) {
         body: JSON.stringify({ structuredQuery: {
             from: [{ collectionId: col }],
             where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: val } } },
-            orderBy: [{ field: { fieldPath: 'score' }, direction: 'DESCENDING' }],
             limit: 200,
         }}),
     });
