@@ -815,6 +815,19 @@ async function fsGet(col, id) {
     if (!r.ok) throw await fsMkErr(r);
     return r.json();
 }
+async function fsBatchGet(col, ids) {
+    if (ids.length === 0) return [];
+    const headers = { 'Content-Type': 'application/json' };
+    if (currentUser) { try { headers.Authorization = `Bearer ${await fsToken()}`; } catch(e) {} }
+    const docPath = `projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+    const r = await fetch(`${fsBase()}:batchGet`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ documents: ids.map(id => `${docPath}/${col}/${encodeURIComponent(id)}`) }),
+    });
+    if (!r.ok) throw await fsMkErr(r);
+    const results = await r.json();
+    return results.filter(x => x.found).map(x => fsFields(x.found.fields));
+}
 async function fsPatch(col, id, fields, mask) {
     const qs = mask ? '?' + mask.map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join('&') : '';
     const r = await fetch(`${fsBase()}/${col}/${encodeURIComponent(id)}${qs}`, {
@@ -838,7 +851,8 @@ async function fsQuery(col, field, val) {
         body: JSON.stringify({ structuredQuery: {
             from: [{ collectionId: col }],
             where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: val } } },
-            limit: 100,
+            orderBy: [{ field: { fieldPath: 'score' }, direction: 'DESCENDING' }],
+            limit: 200,
         }}),
     });
     if (!r.ok) throw await fsMkErr(r);
@@ -897,6 +911,9 @@ async function signOutGoogle() {
 
 async function onAuthChange(user) {
     currentUser = user;
+    // 계정 전환 시 세션 캐시 초기화
+    Object.keys(localBest).forEach(k => delete localBest[k]);
+    Object.keys(rankCache).forEach(k => delete rankCache[k]);
     if (user) {
         await loadCloudData(user);
         // 게임 중(loadingOverlay 숨김)에는 모달 표시 안 함 — goToMenu()에서 처리
@@ -1075,6 +1092,9 @@ async function confirmNickname() {
    RANKING
 ═══════════════════════════════════════════ */
 let currentRankTab = 'daily';
+const rankCache = {};
+const RANK_CACHE_TTL = 60000;
+const localBest = {};  // 세션 내 best score 캐시: { daily: n, weekly: n, allTime: n }
 let rankAllData = [];
 let rankCurrentPage = 0;
 const RANK_PAGE_SIZE = 10;
@@ -1097,21 +1117,40 @@ async function submitLeaderboardScore(s) {
     const uid = currentUser.uid;
     const today = getTodayStr(), week = getWeekStr();
 
-    const trySet = async (col, docId, field, key) => {
-        const existing = await fsGet(col, docId);
-        const prev = existing ? (fsFields(existing.fields).score || 0) : 0;
-        if (prev < s) {
+    let newBest = false;
+    const trySet = async (col, docId, field, key, cacheKey) => {
+        if (localBest[cacheKey] != null) {
+            // 세션 내 이미 알고 있는 값과 비교 — 읽기 없음
+            if (s <= localBest[cacheKey]) return;
             await fsPatch(col, docId, {
                 uid: fsV(uid), nickname: fsV(currentNickname),
                 score: fsV(s), [field]: fsV(key),
             });
+            localBest[cacheKey] = s;
+            newBest = true;
+        } else {
+            // 세션 첫 게임오버 — 1회만 읽기
+            const existing = await fsGet(col, docId);
+            const prev = existing ? (fsFields(existing.fields).score || 0) : 0;
+            if (prev < s) {
+                await fsPatch(col, docId, {
+                    uid: fsV(uid), nickname: fsV(currentNickname),
+                    score: fsV(s), [field]: fsV(key),
+                });
+                localBest[cacheKey] = s;
+                newBest = true;
+            } else {
+                localBest[cacheKey] = prev;
+            }
         }
     };
     await Promise.all([
-        trySet('daily_best',    `${today}_${uid}`, 'date', today),
-        trySet('weekly_best',   `${week}_${uid}`,  'week', week),
-        trySet('all_time_best', uid,               'uid',  uid),
+        trySet('daily_best',    `${today}_${uid}`, 'date', today, 'daily'),
+        trySet('weekly_best',   `${week}_${uid}`,  'week', week,  'weekly'),
+        trySet('all_time_best', uid,               'uid',  uid,   'allTime'),
     ]);
+    // 신기록 시 랭킹 캐시 무효화 (다음 랭킹 오픈 시 최신 데이터 반영)
+    if (newBest) { delete rankCache.daily; delete rankCache.weekly; delete rankCache.member; }
 }
 
 function openRanking() {
@@ -1144,6 +1183,16 @@ async function loadRanking(tab) {
     const list = document.getElementById('rankingList');
     const pagination = document.getElementById('rankPagination');
 
+    // 캐시 확인 (60초 이내 동일 탭 재조회 방지)
+    const cached = rankCache[tab];
+    if (cached && Date.now() - cached.ts < RANK_CACHE_TTL) {
+        rankAllData = cached.data;
+        const myIdx = rankAllData.findIndex(d => d.uid === currentUser?.uid);
+        rankCurrentPage = myIdx >= 0 ? Math.floor(myIdx / RANK_PAGE_SIZE) : 0;
+        renderRankPage();
+        return;
+    }
+
     list.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:160px;color:rgba(255,255,255,0.35);font-size:13px;">로딩 중…</div>';
     pagination.innerHTML = '';
 
@@ -1153,8 +1202,7 @@ async function loadRanking(tab) {
             const memberUids = new Set(Object.values(MEMBER_UIDS).filter(Boolean));
             const myUid = currentUser?.uid ?? null;
             const allUids = [...memberUids, ...(myUid && !memberUids.has(myUid) ? [myUid] : [])];
-            const docs = await Promise.all(allUids.map(u => fsGet('all_time_best', u)));
-            rows = docs.filter(Boolean).map(doc => fsFields(doc.fields));
+            rows = await fsBatchGet('all_time_best', allUids);
         } else {
             const col   = tab === 'daily' ? 'daily_best' : 'weekly_best';
             const field = tab === 'daily' ? 'date' : 'week';
@@ -1169,6 +1217,7 @@ async function loadRanking(tab) {
         }
 
         rankAllData = rows.sort((a, b) => b.score - a.score);
+        rankCache[tab] = { ts: Date.now(), data: rankAllData };
 
         // 내 순위 페이지로 이동
         const myIdx = rankAllData.findIndex(d => d.uid === currentUser?.uid);
@@ -1271,7 +1320,7 @@ const ALL_MEMBERS = [
 const MEMBER_UIDS = {
     '천양':   'xhF6fcrsbwTXnb8g1mpZi4NWubI2',
     '임하밍': 'J0FHoYYay1OaKarMvXoqjttUiJw1',
-    '캬앙':   'JyCMN8sGIUUYqJRYP71qFyeCA1L2',
+    '캬앙':   '',
     '김웰로': 'BkJHWbesbFPfOjxoZw893eHLFbg1',
     '달타':   'ipkZDVhMWWTO6YcdtBO1wm6Bi6A3',
     '체비':   '',
