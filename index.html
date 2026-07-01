@@ -851,7 +851,7 @@ async function fsQuery(col, field, val) {
         body: JSON.stringify({ structuredQuery: {
             from: [{ collectionId: col }],
             where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: val } } },
-            limit: 200,
+            limit: 100,
         }}),
     });
     if (!r.ok) throw await fsMkErr(r);
@@ -2328,7 +2328,7 @@ function onSFXSlider(val) {
     localStorage.setItem('chunta_sfx_vol', sfxVolume);
     document.getElementById('sfxVolLabel').textContent = val + '%';
     sfx('select'); // 미리듣기
-    saveCloudData();
+    saveCloudData();  
 }
 
 /* ═══════════════════════════════════════════
